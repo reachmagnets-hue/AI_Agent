@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./apps/backend
+    ports:
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL:-your_supabase_url}
+      - SUPABASE_KEY=${SUPABASE_KEY:-your_supabase_key}
+      - VAPI_API_KEY=${VAPI_API_KEY:-your_vapi_api_key}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER:-+1234567890}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+    depends_on:
+      - redis
+    volumes:
+      - ./apps/backend:/app
+    networks:
+      - reachmagnets
+
+  frontend:
+    build: ./apps/frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    volumes:
+      - ./apps/frontend:/app
+    networks:
+      - reachmagnets
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - reachmagnets
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - reachmagnets
+
+volumes:
+  redis_data:
+
+networks:
+  reachmagnets:
