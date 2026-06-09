@@ -19,7 +19,9 @@ services:
       - reachmagnets
 
   frontend:
-    build: ./apps/frontend
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     ports:
       - "3000:3000"
     environment:
