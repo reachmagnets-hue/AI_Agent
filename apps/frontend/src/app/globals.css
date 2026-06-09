@@ -61,6 +61,9 @@
   * {
     @apply border-border;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground transition-all duration-300;
     background-image: 
@@ -82,13 +85,17 @@
 .gradient-title {
   background: linear-gradient(135deg, hsl(262, 80%, 45%) 0%, hsl(262, 80%, 65%) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .gradient-title-accent {
   background: linear-gradient(135deg, hsl(262, 80%, 55%) 0%, hsl(310, 80%, 60%) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 /* Micro-animations */
@@ -109,4 +116,23 @@
 input:focus, select:focus, textarea:focus {
   outline: none;
   box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+}
+
+/* Premium Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
 }

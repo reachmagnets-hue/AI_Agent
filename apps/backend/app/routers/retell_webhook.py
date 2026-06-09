@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime, date as datetime_date
+from datetime import datetime, date as datetime_date, timezone
 import uuid
 import re
+import structlog
 
 from app.core.database import get_db, SessionLocal
 from app.models.call import Call
 from app.models.lead import Lead
 from app.models.appointment import Appointment
 from app.services import email_service, sms_service, whatsapp_service, calcom_service
+from app.core.websocket import websocket_manager
 
 router = APIRouter(prefix="/api/retell", tags=["retell"])
+logger = structlog.get_logger(__name__)
 
 # ─── HELPER FUNCTIONS FOR DB OPERATIONS ───
 
@@ -19,12 +22,60 @@ def update_lead_status(lead_id: str, status: str):
         return
     db = SessionLocal()
     try:
-        lead = db.query(Lead).filter(Lead.id == uuid.UUID(lead_id)).first()
+        lead_uuid = uuid.UUID(lead_id) if isinstance(lead_id, str) else lead_id
+        lead = db.query(Lead).filter(Lead.id == lead_uuid).first()
         if lead:
             lead.status = status
             db.commit()
     except Exception as e:
-        print(f"Error updating lead status: {e}")
+        logger.error("Error updating lead status", lead_id=lead_id, error=str(e))
+    finally:
+        db.close()
+
+def update_lead_from_analysis(lead_id: str, status: str, custom_data: dict = None, ai_summary: str = None):
+    if not lead_id:
+        return
+    db = SessionLocal()
+    try:
+        lead_uuid = uuid.UUID(lead_id) if isinstance(lead_id, str) else lead_id
+        lead = db.query(Lead).filter(Lead.id == lead_uuid).first()
+        if lead:
+            lead.status = status
+            
+            if custom_data:
+                # Map lead score status to numeric score
+                score_status = custom_data.get("lead_score_status", "Neutral")
+                score_map = {
+                    "Interested": 85,
+                    "Neutral": 50,
+                    "Not interested": 15
+                }
+                numeric_score = score_map.get(score_status, 50)
+                if status == "meeting_booked":
+                    numeric_score = 100
+                elif status == "interested":
+                    numeric_score = 90
+                elif status == "not_interested":
+                    numeric_score = 10
+                
+                lead.lead_score = numeric_score
+                
+                # Update decision maker status in notes
+                dm_status = custom_data.get("is_decision_maker", "Uncertain")
+                notes_addon = f"[AI Audit] Decision Maker: {dm_status} | Lead Score status: {score_status}"
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                formatted_note = f"\n[{timestamp}] {notes_addon}"
+                if lead.internal_notes:
+                    lead.internal_notes += formatted_note
+                else:
+                    lead.internal_notes = formatted_note.strip()
+                    
+            if ai_summary:
+                lead.ai_summary = ai_summary
+                
+            db.commit()
+    except Exception as e:
+        logger.error("Error updating lead from analysis", lead_id=lead_id, error=str(e))
     finally:
         db.close()
 
@@ -44,12 +95,12 @@ def create_call_record(call_id: str, lead_id: str, call_data: dict):
                 status="initiated",
                 from_number=call_data.get("from_number"),
                 to_number=call_data.get("to_number"),
-                started_at=datetime.utcnow()
+                started_at=datetime.now(timezone.utc)
             )
             db.add(call)
             db.commit()
     except Exception as e:
-        print(f"Error creating call record: {e}")
+        logger.error("Error creating call record", call_id=call_id, error=str(e))
     finally:
         db.close()
 
@@ -61,10 +112,10 @@ def update_call_duration(call_id: str, duration: int):
         call = db.query(Call).filter(Call.retell_call_id == call_id).first()
         if call:
             call.duration_seconds = duration
-            call.ended_at = datetime.utcnow()
+            call.ended_at = datetime.now(timezone.utc)
             db.commit()
     except Exception as e:
-        print(f"Error updating call duration: {e}")
+        logger.error("Error updating call duration", call_id=call_id, error=str(e))
     finally:
         db.close()
 
@@ -91,12 +142,12 @@ def save_call_analysis(call_id: str, transcript: str, summary: str, outcome: str
                     lead_id=lead_uuid,
                     campaign_id=camp_uuid,
                     status="initiated",
-                    started_at=datetime.utcnow()
+                    started_at=datetime.now(timezone.utc)
                 )
                 db.add(call)
                 db.commit()
             except Exception as e:
-                print(f"Error creating missing call record in save_call_analysis: {e}")
+                logger.error("Error creating missing call record in save_call_analysis", call_id=call_id, error=str(e))
                 
         # Re-fetch or use existing
         call = db.query(Call).filter(Call.retell_call_id == call_id).first()
@@ -106,13 +157,14 @@ def save_call_analysis(call_id: str, transcript: str, summary: str, outcome: str
             call.outcome = outcome
             call.status = "completed"
             call.recording_url = analysis.get("recording_url")
+            call.objection_raised = analysis.get("objection_raised")
             
             if outcome == "meeting_booked":
                 call.meeting_booked = True
                 
             db.commit()
     except Exception as e:
-        print(f"Error saving call analysis: {e}")
+        logger.error("Error saving call analysis", call_id=call_id, error=str(e))
     finally:
         db.close()
 
@@ -178,7 +230,21 @@ async def retell_webhook(
             "voicemail": "voicemail"
         }
         if lead_id:
-            update_lead_status(lead_id, status_map.get(outcome, "called"))
+            update_lead_from_analysis(lead_id, status_map.get(outcome, "called"), custom, summary)
+            
+        # Broadcast real-time call completed event to CRM
+        background_tasks.add_task(
+            websocket_manager.broadcast,
+            {
+                "event": "lead_status_updated",
+                "lead_id": str(lead_id) if lead_id else None,
+                "status": status_map.get(outcome, "called"),
+                "outcome": outcome,
+                "prospect_name": prospect_name,
+                "business_name": business,
+                "call_id": call_id
+            }
+        )
         
         # Fire post-call actions in background
         background_tasks.add_task(

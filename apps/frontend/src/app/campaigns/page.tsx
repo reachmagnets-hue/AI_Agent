@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { BarChart3, Play, Pause, Clock, CheckCircle, XCircle, PlusCircle, Upload, AlertCircle, Users } from 'lucide-react';
+import { BarChart3, Play, Pause, Clock, CheckCircle, XCircle, PlusCircle, Upload, AlertCircle, Users, RefreshCw } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Campaign {
@@ -16,6 +16,8 @@ interface Campaign {
   total_called: number;
   total_answered: number;
   total_booked: number;
+  total_pending?: number;
+  total_unpicked?: number;
   created_at: string;
 }
 
@@ -133,6 +135,19 @@ export default function CampaignsPage() {
       if (res.ok) queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleRecampaign = async (id: string, resetAll: boolean = false) => {
+    try {
+      const res = await fetch(`/api/v1/campaigns/${id}/recampaign?reset_all=${resetAll}`, { method: 'POST' });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+        alert(resetAll ? "All leads (except booked) have been reset to pending!" : "Unpicked leads have been reset to pending!");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to recampaign. Please try again.");
     }
   };
 
@@ -338,20 +353,20 @@ export default function CampaignsPage() {
                       <p className="text-xs text-muted-foreground">Contacts</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{callsMade}</p>
-                      <p className="text-xs text-muted-foreground">Calls Made</p>
+                      <p className="text-2xl font-bold text-amber-500">{campaign.total_pending || 0}</p>
+                      <p className="text-xs text-muted-foreground">Pending</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-green-500">{callsSuccessful}</p>
-                      <p className="text-xs text-muted-foreground">Answered</p>
+                      <p className="text-2xl font-bold text-green-500">{campaign.total_answered || 0}</p>
+                      <p className="text-xs text-muted-foreground">Picked / Answered</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-rose-500">{campaign.total_unpicked || 0}</p>
+                      <p className="text-xs text-muted-foreground">Unpicked / Failed</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-purple-500">{campaign.total_booked || 0}</p>
                       <p className="text-xs text-muted-foreground">Booked Meetings</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{(campaign.total_leads || 0) - callsMade}</p>
-                      <p className="text-xs text-muted-foreground">Remaining</p>
                     </div>
                   </div>
                   <div className="mt-4 pt-4 border-t border-muted-foreground/10">
@@ -361,6 +376,18 @@ export default function CampaignsPage() {
                         <p className="text-2xl font-bold text-primary">{successRate}%</p>
                       </div>
                       <div className="flex space-x-2">
+                        {campaign.total_unpicked !== undefined && campaign.total_unpicked > 0 && (
+                          <Button variant="outline" size="sm" onClick={() => handleRecampaign(campaign.id, false)} className="border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+                            <RefreshCw className="h-3 w-3 mr-1.5" />
+                            Recampaign Unpicked
+                          </Button>
+                        )}
+                        {campaign.status !== 'active' && campaign.status !== 'draft' && (
+                          <Button variant="outline" size="sm" onClick={() => handleRecampaign(campaign.id, true)} className="border-violet-200 text-violet-700 hover:bg-violet-50">
+                            <RefreshCw className="h-3 w-3 mr-1.5" />
+                            Recampaign All
+                          </Button>
+                        )}
                         {campaign.status === 'draft' && (
                           <Button variant="default" size="sm" onClick={() => handleStartCampaign(campaign.id)}>
                             <Play className="h-3 w-3 mr-1.5 fill-current" />
@@ -378,6 +405,11 @@ export default function CampaignsPage() {
                             <Play className="h-3 w-3 mr-1.5 fill-current" />
                             Resume
                           </Button>
+                        )}
+                        {campaign.status === 'completed' && (
+                          <span className="text-sm text-green-600 font-semibold px-3 py-1.5 bg-green-50 rounded-md">
+                            Campaign Completed
+                          </span>
                         )}
                       </div>
                     </div>

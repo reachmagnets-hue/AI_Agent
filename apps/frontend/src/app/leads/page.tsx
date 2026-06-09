@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Search, Plus, Filter, Upload, AlertCircle, Eye, Star } from 'lucide-react';
+import { Users, Search, Plus, Filter, Upload, AlertCircle, Eye, Star, Sparkles, X, Loader2, FileImage } from 'lucide-react';
 
 async function fetchLeads({ search, status, priority, page }: { search: string; status: string; priority: string; page: number }) {
   let url = `/api/v1/leads/?page=${page}&limit=15`;
@@ -43,6 +43,128 @@ export default function LeadsPage() {
   const [page, setPage] = useState(1);
   const [file, setFile] = useState<File | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // AI Screenshot Extraction State
+  interface QueueItem {
+    id: string;
+    file: File;
+    status: 'ready' | 'processing' | 'success_created' | 'success_merged' | 'error';
+    businessName?: string;
+    error?: string;
+  }
+
+  const [screenshotQueue, setScreenshotQueue] = useState<QueueItem[]>([]);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = Array.from(e.dataTransfer.files).filter(
+        file => file.type.startsWith('image/')
+      );
+      
+      const newItems: QueueItem[] = filesArray.map(file => ({
+        id: Math.random().toString(36).substring(2, 9),
+        file,
+        status: 'ready'
+      }));
+      
+      setScreenshotQueue(prev => [...prev, ...newItems]);
+    }
+  };
+
+  const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArray = Array.from(e.target.files).filter(
+        file => file.type.startsWith('image/')
+      );
+      
+      const newItems: QueueItem[] = filesArray.map(file => ({
+        id: Math.random().toString(36).substring(2, 9),
+        file,
+        status: 'ready'
+      }));
+      
+      setScreenshotQueue(prev => [...prev, ...newItems]);
+    }
+  };
+
+  const removeQueueItem = (id: string) => {
+    setScreenshotQueue(prev => prev.filter(item => item.id !== id));
+  };
+
+  const clearQueue = () => {
+    setScreenshotQueue([]);
+  };
+
+  const startScreenshotExtraction = async () => {
+    if (screenshotQueue.length === 0 || isExtracting) return;
+    
+    setIsExtracting(true);
+    
+    // Process items sequentially
+    for (let i = 0; i < screenshotQueue.length; i++) {
+      const item = screenshotQueue[i];
+      if (item.status === 'success_created' || item.status === 'success_merged') {
+        continue;
+      }
+      
+      setScreenshotQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'processing' } : q));
+      
+      try {
+        const formData = new FormData();
+        formData.append('files', item.file);
+        
+        const res = await fetch('/api/v1/leads/extract-screenshots', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText || 'Extraction failed');
+        }
+        
+        const resData = await res.json();
+        if (resData.success && resData.results && resData.results.length > 0) {
+          const result = resData.results[0];
+          const status = result.status === 'created' ? 'success_created' : 'success_merged';
+          
+          setScreenshotQueue(prev => prev.map(q => q.id === item.id ? { 
+            ...q, 
+            status, 
+            businessName: result.business_name || item.file.name 
+          } : q));
+        } else {
+          throw new Error('No details extracted from screenshot');
+        }
+      } catch (err: any) {
+        console.error("Error processing screenshot:", err);
+        setScreenshotQueue(prev => prev.map(q => q.id === item.id ? { 
+          ...q, 
+          status: 'error', 
+          error: err.message || 'Error occurred' 
+        } : q));
+      }
+    }
+    
+    setIsExtracting(false);
+    queryClient.invalidateQueries({ queryKey: ['leads'] });
+  };
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['leads', { search, status, priority, page }],
@@ -105,21 +227,27 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Users className="h-8 w-8 text-primary" /> Lead Profiles & CRM
-          </h1>
-          <p className="text-muted-foreground mt-1">Manage leads, track statuses, and audit calling outcomes.</p>
-        </div>
-        
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <Users className="h-8 w-8 text-primary" /> Lead Profiles & CRM
+        </h1>
+        <p className="text-muted-foreground mt-1">Manage leads, track statuses, and audit calling outcomes.</p>
+      </div>
+
+      {/* Import & Extraction Hub */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* CSV Import */}
-        <Card className="max-w-md bg-card border-muted-foreground/10">
-          <CardContent className="pt-6">
+        <Card className="bg-card border-muted-foreground/10 flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Upload className="h-5 w-5 text-primary" /> Bulk Upload CSV Leads
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Import a list of leads using a standard CSV file. Validates and registers leads against the DNC registry automatically.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-2 flex flex-col justify-end flex-grow">
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold flex items-center gap-1.5">
-                <Upload className="h-4 w-4 text-primary" /> Bulk Upload CSV Leads
-              </label>
               <div className="flex gap-2">
                 <Input type="file" accept=".csv" onChange={handleFileChange} className="bg-background text-sm file:text-primary" />
                 <Button onClick={handleUpload} disabled={!file || importMutation.isPending} size="sm">
@@ -130,6 +258,148 @@ export default function LeadsPage() {
                 <p className="text-xs text-primary mt-1.5 flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> {importStatus}
                 </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* AI Screenshot Lead Extractor */}
+        <Card className="bg-card border-muted-foreground/10 flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" /> AI Screenshot Lead Extractor
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Drop Google Ads CRM screenshots here. Gemini will auto-extract client info, merge duplicates, and update calling lists.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-2 flex-grow">
+            <div className="space-y-4">
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById('screenshot-file-input')?.click()}
+                className={`relative border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all ${
+                  dragActive 
+                    ? 'border-primary bg-primary/5' 
+                    : 'border-muted-foreground/20 hover:border-primary/40 bg-background/20'
+                }`}
+              >
+                <input
+                  id="screenshot-file-input"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleScreenshotChange}
+                  className="hidden"
+                />
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <div className="p-2.5 rounded-full bg-primary/10 text-primary">
+                    <FileImage className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-foreground">Click to upload</span>
+                    <span className="text-sm text-muted-foreground"> or drag & drop</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, or WEBP (Max 10MB each)</p>
+                </div>
+              </div>
+
+              {screenshotQueue.length > 0 && (
+                <div className="space-y-3 mt-4">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-muted-foreground">
+                      Upload Queue ({screenshotQueue.filter(q => q.status === 'success_created' || q.status === 'success_merged').length}/{screenshotQueue.length})
+                    </span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={clearQueue} 
+                      disabled={isExtracting}
+                      className="h-auto p-1 text-muted-foreground hover:text-red-500"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                  
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+                    {screenshotQueue.map((item) => (
+                      <div 
+                        key={item.id} 
+                        className="flex items-center justify-between p-2 rounded bg-background border border-muted-foreground/5 text-sm"
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden mr-2">
+                          <FileImage className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate text-xs font-medium" title={item.file.name}>
+                            {item.file.name}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 shrink-0">
+                          {item.status === 'ready' && (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-secondary text-secondary-foreground font-semibold">
+                              Ready
+                            </span>
+                          )}
+                          {item.status === 'processing' && (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 font-semibold flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Processing
+                            </span>
+                          )}
+                          {item.status === 'success_created' && (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 font-semibold">
+                              Created: {item.businessName || 'Lead'}
+                            </span>
+                          )}
+                          {item.status === 'success_merged' && (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 border border-purple-500/20 font-semibold">
+                              Merged: {item.businessName || 'Lead'}
+                            </span>
+                          )}
+                          {item.status === 'error' && (
+                            <span 
+                              className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 font-semibold cursor-help"
+                              title={item.error}
+                            >
+                              Failed
+                            </span>
+                          )}
+                          
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeQueueItem(item.id)}
+                            disabled={isExtracting}
+                            className="h-5 w-5 text-muted-foreground hover:text-red-500"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <Button 
+                    onClick={startScreenshotExtraction} 
+                    disabled={isExtracting || !screenshotQueue.some(q => q.status === 'ready' || q.status === 'error')}
+                    className="w-full flex items-center justify-center gap-1.5"
+                    size="sm"
+                  >
+                    {isExtracting ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Extracting Details...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Extract Lead Details
+                      </>
+                    )}
+                  </Button>
+                </div>
               )}
             </div>
           </CardContent>
@@ -192,6 +462,11 @@ export default function LeadsPage() {
                   <option value="interested">Interested</option>
                   <option value="meeting_booked">Meeting Booked</option>
                   <option value="not_interested">Not Interested</option>
+                  <option value="no_answer">No Answer</option>
+                  <option value="voicemail">Voicemail</option>
+                  <option value="follow_up">Follow Up</option>
+                  <option value="closed_won">Closed Won</option>
+                  <option value="closed_lost">Closed Lost</option>
                 </select>
               </div>
 
@@ -227,6 +502,7 @@ export default function LeadsPage() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Priority</TableHead>
+                    <TableHead>Decision Maker</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Last Contacted</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -247,9 +523,28 @@ export default function LeadsPage() {
                         <span className={getPriorityColor(lead.priority)}>{lead.priority}</span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 text-yellow-500">
-                          <Star className="h-3.5 w-3.5 fill-current" />
-                          <span className="text-sm font-bold">{lead.lead_score || 0}</span>
+                        {(() => {
+                          const isDM = lead.internal_notes?.includes("Decision Maker: Yes") ? "Yes" : 
+                                       lead.internal_notes?.includes("Decision Maker: No") ? "No" : "Uncertain";
+                          if (isDM === "Yes") return <span className="px-2 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-xs font-semibold">Yes</span>;
+                          if (isDM === "No") return <span className="px-2 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-xs font-semibold">No</span>;
+                          return <span className="text-gray-400 text-xs font-medium">Uncertain</span>;
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1 text-yellow-500">
+                            <Star className="h-3.5 w-3.5 fill-current" />
+                            <span className="text-sm font-bold">{lead.lead_score || 0}</span>
+                          </div>
+                          {lead.lead_score > 0 && (
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold uppercase w-max ${
+                              lead.lead_score >= 80 ? 'bg-green-100 text-green-800' :
+                              lead.lead_score >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {lead.lead_score >= 80 ? 'Hot' : lead.lead_score >= 40 ? 'Warm' : 'Cold'}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">

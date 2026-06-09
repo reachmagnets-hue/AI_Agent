@@ -492,3 +492,228 @@ def add_lead_note(lead_id: UUID, note: str = Query(...), db: Session = Depends(g
     db.commit()
     db.refresh(lead)
     return lead
+
+# ─── SCREENSHOT DETAILS EXTRACTOR INTEGRATION ───
+
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "business_name": {
+            "type": "string",
+            "description": "The name of the business/company. Strip trailing numbers or CIDs."
+        },
+        "website": {
+            "type": "string",
+            "description": "The business website domain."
+        },
+        "poc_name": {
+            "type": "string",
+            "description": "Person of contact names. If multiple, separate with a comma."
+        },
+        "phone_number": {
+            "type": "string",
+            "description": "Phone numbers. If multiple, separate with a comma."
+        },
+        "email": {
+            "type": "string",
+            "description": "Email addresses. If multiple, separate with a comma."
+        },
+        "google_ads_account_cid": {
+            "type": "string",
+            "description": "The 9 or 10 digit Google Ads Customer ID (CID). If not found, use '--'."
+        },
+        "last_spoken_google_wrap_name": {
+            "type": "string",
+            "description": "The name of the Google representative who last made contact."
+        },
+        "remarks": {
+            "type": "string",
+            "description": "Any relevant team notes or call remarks."
+        }
+    },
+    "required": [
+        "business_name",
+        "website",
+        "poc_name",
+        "phone_number",
+        "email",
+        "google_ads_account_cid",
+        "last_spoken_google_wrap_name",
+        "remarks"
+    ]
+}
+
+SYSTEM_INSTRUCTION = """
+You are a precise data extraction assistant. Your task is to extract lead details from screenshots of a Google Ads CRM interface.
+Analyze the screenshot carefully. Note that the image may be rotated sideways; read the text in whatever orientation it appears.
+Extract fields precisely.
+"""
+
+@router.post("/extract-screenshots")
+async def extract_lead_from_screenshots(
+    files: List[UploadFile] = File(...),
+    campaign_id: Optional[UUID] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Accept multiple screenshot images, call Gemini to extract structured lead details, 
+    merge duplicates, and save to database.
+    """
+    from app.core.config import get_settings
+    from PIL import Image
+    import json
+    import google.generativeai as genai
+    from app.core.websocket import websocket_manager
+    
+    settings = get_settings()
+    api_key = settings.GEMINI_API_KEY
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="GEMINI_API_KEY is not configured in backend settings. Please set it in your .env file."
+        )
+        
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": RESPONSE_SCHEMA
+        },
+        system_instruction=SYSTEM_INSTRUCTION
+    )
+    
+    success_count = 0
+    errors_count = 0
+    results = []
+    
+    for upload_file in files:
+        try:
+            # Read and verify image
+            contents = await upload_file.read()
+            image = Image.open(io.BytesIO(contents))
+            
+            # Send to Gemini
+            response = model.generate_content([
+                "Extract all available lead details from this Google Ads CRM screenshot.",
+                image
+            ])
+            
+            if not response.text:
+                errors_count += 1
+                continue
+                
+            data = json.loads(response.text)
+            
+            business = str(data.get("business_name", "")).strip()
+            website = str(data.get("website", "")).strip()
+            poc = str(data.get("poc_name", "")).strip()
+            phone_raw = str(data.get("phone_number", "")).strip()
+            email = str(data.get("email", "")).strip()
+            cid = str(data.get("google_ads_account_cid", "")).strip()
+            google_rep = str(data.get("last_spoken_google_wrap_name", "")).strip()
+            remarks = str(data.get("remarks", "")).strip()
+            
+            if not business and not phone_raw:
+                errors_count += 1
+                continue
+                
+            # Smart phone cleaning and formatting for the first phone number
+            formatted_phone = "+1000000000"
+            first_phone = phone_raw.split(",")[0].strip()
+            digits = ''.join(filter(str.isdigit, first_phone))
+            if digits:
+                if len(digits) == 10:
+                    formatted_phone = f"+1{digits}"
+                else:
+                    formatted_phone = f"+{digits}"
+            
+            # Look for existing lead
+            existing = None
+            if formatted_phone != "+1000000000":
+                existing = db.query(Lead).filter(
+                    Lead.phone == formatted_phone,
+                    Lead.is_active == True
+                ).first()
+                
+            if not existing and business:
+                business_lower = business.lower()
+                existing = db.query(Lead).filter(
+                    Lead.business_name.ilike(business_lower),
+                    Lead.is_active == True
+                ).first()
+                
+            if existing:
+                # Merge details
+                if not existing.full_name and poc:
+                    existing.full_name = poc
+                if email:
+                    existing.email = email if not existing.email else f"{existing.email}, {email}"
+                
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                notes_addon = f"[AI Screenshot Extraction - {timestamp}]\n"
+                if cid and cid != "--":
+                    notes_addon += f"- Google Ads CID: {cid}\n"
+                if google_rep:
+                    notes_addon += f"- Last Google Rep: {google_rep}\n"
+                if phone_raw:
+                    notes_addon += f"- Extracted Phone(s): {phone_raw}\n"
+                if remarks:
+                    notes_addon += f"- Remarks: {remarks}\n"
+                
+                if existing.internal_notes:
+                    existing.internal_notes = notes_addon + "\n" + existing.internal_notes
+                else:
+                    existing.internal_notes = notes_addon
+                    
+                db.commit()
+                results.append({"business_name": business, "status": "merged", "lead_id": str(existing.id)})
+            else:
+                # Create new lead
+                notes_body = f"[AI Screenshot Extraction]\n"
+                if cid and cid != "--":
+                    notes_body += f"- Google Ads CID: {cid}\n"
+                if google_rep:
+                    notes_body += f"- Last Google Rep: {google_rep}\n"
+                if phone_raw:
+                    notes_body += f"- Extracted Phone(s): {phone_raw}\n"
+                if remarks:
+                    notes_body += f"- Remarks: {remarks}\n"
+                    
+                new_lead = Lead(
+                    full_name=poc or "Prospect Name",
+                    business_name=business or "Business Name",
+                    phone=formatted_phone,
+                    email=email or None,
+                    website=website or None,
+                    campaign_id=campaign_id,
+                    source=f"screenshot_{upload_file.filename[:30]}" if upload_file.filename else "screenshot_extraction",
+                    internal_notes=notes_body,
+                    status="pending"
+                )
+                db.add(new_lead)
+                db.commit()
+                db.refresh(new_lead)
+                results.append({"business_name": business, "status": "created", "lead_id": str(new_lead.id)})
+                
+            success_count += 1
+            
+            # Broadcast WebSocket notification so the CRM UI updates live
+            await websocket_manager.broadcast({
+                "event": "lead_status_updated",
+                "lead_id": results[-1]["lead_id"],
+                "status": "pending",
+                "business_name": business
+            })
+            
+        except Exception as e:
+            errors_count += 1
+            
+    return {
+        "success": True,
+        "processed": len(files),
+        "imported": success_count,
+        "errors": errors_count,
+        "results": results
+    }

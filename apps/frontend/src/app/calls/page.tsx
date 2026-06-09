@@ -142,8 +142,12 @@ export default function CallsPage() {
                 <option value="all">All Outcomes</option>
                 <option value="meeting_booked">Meeting Booked</option>
                 <option value="interested">Interested</option>
+                <option value="interested_callback">Callback Requested</option>
                 <option value="not_interested">Not Interested</option>
                 <option value="voicemail_left">Voicemail Left</option>
+                <option value="no_answer">No Answer</option>
+                <option value="hung_up">Hung Up</option>
+                <option value="wrong_number">Wrong Number</option>
               </select>
             </div>
           </div>

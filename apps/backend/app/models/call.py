@@ -42,6 +42,7 @@ class Call(Base):
     transcript = Column(Text, nullable=True)  # (full conversation text)
     ai_summary = Column(Text, nullable=True)  # (3-line GPT-4o summary)
     sentiment = Column(String(20), nullable=True)  # (positive, neutral, negative)
+    objection_raised = Column(String(250), nullable=True)
     
     # Actions Taken
     meeting_booked = Column(Boolean, default=False)

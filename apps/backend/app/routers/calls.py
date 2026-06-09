@@ -39,10 +39,22 @@ def get_calls(
         query = query.filter(Call.lead_id == lead_id)
     if campaign_id:
         query = query.filter(Call.campaign_id == campaign_id)
+    outcome_filter = None
     if outcome:
-        query = query.filter(Call.outcome == outcome)
+        outcomes = [o.strip() for o in outcome.split(',')]
+        outcome_filter = Call.outcome.in_(outcomes)
+        
+    status_filter = None
     if status:
-        query = query.filter(Call.status == status)
+        statuses = [s.strip() for s in status.split(',')]
+        status_filter = Call.status.in_(statuses)
+        
+    if outcome_filter is not None and status_filter is not None:
+        query = query.filter(or_(outcome_filter, status_filter))
+    elif outcome_filter is not None:
+        query = query.filter(outcome_filter)
+    elif status_filter is not None:
+        query = query.filter(status_filter)
         
     if date_from:
         query = query.filter(Call.started_at >= date_from)
@@ -103,6 +115,7 @@ def get_calls(
             "transcript": call.transcript,
             "ai_summary": call.ai_summary,
             "sentiment": call.sentiment,
+            "objection_raised": call.objection_raised,
             "meeting_booked": call.meeting_booked,
             "sms_sent": call.sms_sent,
             "email_sent": call.email_sent,
@@ -160,24 +173,56 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 @router.get("/stats/overview")
 def get_calls_stats_overview(db: Session = Depends(get_db)):
     """Hourly and daily metrics overview report for call logs"""
+    from datetime import timedelta, timezone
+    now_utc = datetime.now(timezone.utc)
     today_start = datetime.combine(date.today(), datetime.min.time())
+    week_start = today_start - timedelta(days=today_start.weekday())
+    month_start = today_start.replace(day=1)
     
-    # helper for aggregates
+    # Today metrics
     today_query = db.query(Call).filter(Call.created_at >= today_start)
     today_total = today_query.count()
     today_answered = today_query.filter(Call.status == "completed").count()
     today_booked = today_query.filter(Call.meeting_booked == True).count()
     today_avg_dur = today_query.with_entities(func.avg(Call.duration_seconds)).scalar() or 0.0
 
-    # outcome breakdown
+    # This week real data
+    week_query = db.query(Call).filter(Call.created_at >= week_start)
+    week_total = week_query.count()
+    week_answered = week_query.filter(Call.status == "completed").count()
+    week_booked = week_query.filter(Call.meeting_booked == True).count()
+    week_avg_dur = week_query.with_entities(func.avg(Call.duration_seconds)).scalar() or 0.0
+
+    # This month real data
+    month_query = db.query(Call).filter(Call.created_at >= month_start)
+    month_total = month_query.count()
+    month_answered = month_query.filter(Call.status == "completed").count()
+    month_booked = month_query.filter(Call.meeting_booked == True).count()
+    month_avg_dur = month_query.with_entities(func.avg(Call.duration_seconds)).scalar() or 0.0
+
+    # outcome breakdown (all time)
     outcomes = db.query(Call.outcome, func.count(Call.id)).group_by(Call.outcome).all()
     by_outcome = {o: count for o, count in outcomes if o is not None}
 
-    # hourly activity (mocked/queried)
+    # hourly activity for today
     hourly_calls = [
-        {"hour": h, "calls": db.query(Call).filter(func.extract('hour', Call.created_at) == h).count()}
+        {"hour": h, "calls": db.query(Call).filter(
+            Call.created_at >= today_start,
+            func.extract('hour', Call.created_at) == h
+        ).count()}
         for h in range(8, 21)
     ]
+
+    # daily breakdown for this week
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    by_day = []
+    for i, day_name in enumerate(day_names[:7]):
+        d_start = week_start + timedelta(days=i)
+        d_end = d_start + timedelta(days=1)
+        d_total = db.query(Call).filter(Call.created_at >= d_start, Call.created_at < d_end).count()
+        d_answered = db.query(Call).filter(Call.created_at >= d_start, Call.created_at < d_end, Call.status == "completed").count()
+        answer_rate = round(d_answered / d_total, 2) if d_total > 0 else 0.0
+        by_day.append({"day": day_name, "calls": d_total, "answer_rate": answer_rate})
 
     return {
         "today": {
@@ -187,26 +232,20 @@ def get_calls_stats_overview(db: Session = Depends(get_db)):
             "avg_duration": round(float(today_avg_dur), 1)
         },
         "this_week": {
-            "total": today_total * 4,
-            "answered": today_answered * 3,
-            "booked": today_booked * 2,
-            "avg_duration": round(float(today_avg_dur), 1)
+            "total": week_total,
+            "answered": week_answered,
+            "booked": week_booked,
+            "avg_duration": round(float(week_avg_dur), 1)
         },
         "this_month": {
-            "total": today_total * 15,
-            "answered": today_answered * 12,
-            "booked": today_booked * 8,
-            "avg_duration": round(float(today_avg_dur), 1)
+            "total": month_total,
+            "answered": month_answered,
+            "booked": month_booked,
+            "avg_duration": round(float(month_avg_dur), 1)
         },
         "by_outcome": by_outcome,
         "by_hour": hourly_calls,
-        "by_day": [
-            {"day": "Monday", "calls": today_total * 2, "answer_rate": 0.45},
-            {"day": "Tuesday", "calls": today_total * 3, "answer_rate": 0.52},
-            {"day": "Wednesday", "calls": today_total * 2, "answer_rate": 0.48},
-            {"day": "Thursday", "calls": today_total * 3, "answer_rate": 0.40},
-            {"day": "Friday", "calls": today_total * 2, "answer_rate": 0.38}
-        ]
+        "by_day": by_day
     }
 
 @router.get("/{call_id}")
@@ -260,7 +299,7 @@ def cancel_call_log(call_id: UUID, db: Session = Depends(get_db)):
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
     call.status = "failed"
-    call.ended_at = datetime.utcnow()
+    call.ended_at = datetime.now()
     db.commit()
     return {"message": "Call log marked as cancelled"}
 

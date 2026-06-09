@@ -11,6 +11,7 @@ from app.models.lead import Lead
 from app.models.call import Call
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
+from app.core.websocket import websocket_manager
 
 logger = structlog.get_logger(__name__)
 
@@ -107,6 +108,7 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                 "transcript": transcript,
                 "recording_url": recording_url,
                 "ai_summary": ai_summary,
+                "objection_raised": custom_analysis.get("objection_raised"),
                 "ended_at": datetime.utcnow()
             }
             
@@ -161,6 +163,32 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                     # Save AI-extracted call summary to lead
                     if ai_summary and not lead.ai_summary:
                         lead.ai_summary = ai_summary
+
+                    # Update Lead scoring status and decision maker info
+                    score_status = custom_analysis.get("lead_score_status", "Neutral")
+                    score_map = {
+                        "Interested": 85,
+                        "Neutral": 50,
+                        "Not interested": 15
+                    }
+                    numeric_score = score_map.get(score_status, 50)
+                    if contact_status == "meeting_booked":
+                        numeric_score = 100
+                    elif contact_status == "interested":
+                        numeric_score = 90
+                    elif contact_status == "not_interested":
+                        numeric_score = 10
+                    
+                    lead.lead_score = numeric_score
+                    
+                    dm_status = custom_analysis.get("is_decision_maker", "Uncertain")
+                    notes_addon = f"[AI Audit] Decision Maker: {dm_status} | Lead Score status: {score_status}"
+                    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                    formatted_note = f"\n[{timestamp}] {notes_addon}"
+                    if lead.internal_notes:
+                        lead.internal_notes += formatted_note
+                    else:
+                        lead.internal_notes = formatted_note.strip()
                     
                     # Dynamically capture contact details collected by Alex during the call
                     extracted_name = (
@@ -259,6 +287,20 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                             call_record.sms_sent = True
                             call_record.email_sent = True
                             db.commit()
+
+            # Broadcast real-time call completed event to CRM
+            background_tasks.add_task(
+                websocket_manager.broadcast,
+                {
+                    "event": "lead_status_updated",
+                    "lead_id": str(lead_id) if lead_id else None,
+                    "status": contact_status,
+                    "outcome": custom_analysis.get("outcome", "unknown"),
+                    "prospect_name": lead.full_name if lead else "Prospect",
+                    "business_name": lead.business_name if lead else "Business",
+                    "call_id": call_id
+                }
+            )
 
             # Update campaign stats
             if campaign_id:

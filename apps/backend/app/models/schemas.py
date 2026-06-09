@@ -92,6 +92,7 @@ class CallResponse(BaseModel):
     duration_seconds: Optional[int]
     status: CallStatus
     transcript: Optional[str]
+    objection_raised: Optional[str] = None
     recording_url: Optional[str]
     started_at: Optional[datetime]
     ended_at: Optional[datetime]

@@ -60,12 +60,35 @@ def get_utc_offset_for_phone(phone_number: str) -> int:
         
     return AREA_CODE_OFFSETS.get(area_code, -5)
 
-def is_within_calling_hours(phone_number: str) -> bool:
+# Mapping of US State Codes to standard time UTC offsets
+STATE_TZ_OFFSETS = {
+    "AL": -6, "AR": -6, "AS": -11, "AZ": -7, "CA": -8, "CO": -7, "CT": -5, "DE": -5, "DC": -5, "FL": -5, "GA": -5,
+    "GU": 10, "HI": -10, "ID": -7, "IL": -6, "IN": -5, "IA": -6, "KS": -6, "KY": -5, "LA": -6, "ME": -5, "MD": -5,
+    "MA": -5, "MI": -5, "MN": -6, "MS": -6, "MO": -6, "MT": -7, "NE": -6, "NV": -8, "NH": -5, "NJ": -5, "NM": -7,
+    "NY": -5, "NC": -5, "ND": -6, "MP": 10, "OH": -5, "OK": -6, "OR": -8, "PA": -5, "PR": -4, "RI": -5, "SC": -5,
+    "SD": -6, "TN": -6, "TX": -6, "UT": -7, "VT": -5, "VA": -5, "VI": -4, "WA": -8, "WV": -5, "WI": -6, "WY": -7
+}
+
+def is_within_calling_hours(phone_number: str, state_code: str = None) -> bool:
     """
     Checks if current time in prospect's local timezone is between 8:00 AM and 9:00 PM.
+    Uses state_code offset mapping if provided, else falls back to US Area Code parsing.
+    Bypassed in development environment.
     """
-    offset = get_utc_offset_for_phone(phone_number)
-    
+    from app.core.config import get_settings
+    settings = get_settings()
+    if settings.ENVIRONMENT == "development":
+        logger.info("Bypassing timezone compliance check in development environment", phone_number=phone_number)
+        return True
+        
+    offset = None
+    if state_code:
+        clean_state = state_code.strip().upper()
+        offset = STATE_TZ_OFFSETS.get(clean_state)
+        
+    if offset is None:
+        offset = get_utc_offset_for_phone(phone_number)
+        
     # Calculate time in target timezone
     target_tz = timezone(timedelta(hours=offset))
     now_target = datetime.now(timezone.utc).astimezone(target_tz)
@@ -78,6 +101,7 @@ def is_within_calling_hours(phone_number: str) -> bool:
     logger.info(
         "Timezone compliance check",
         phone_number=phone_number,
+        state_code=state_code,
         target_local_time=now_target.strftime("%Y-%m-%d %H:%M:%S %Z"),
         current_hour=current_hour,
         is_valid=is_valid

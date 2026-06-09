@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     BASE_URL: Optional[str] = None
     SECRET_KEY: Optional[str] = None
     RETELL_LLM_ID: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
 
 
     # Application URLs
@@ -76,7 +77,6 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
-        env_prefix="RM_",  # Optional: Environment variable prefix
         extra="ignore"
     )
 
@@ -90,20 +90,15 @@ class Settings(BaseSettings):
 
     def validate_required_settings(self) -> dict:
         """Validate required settings and return status"""
+        import warnings
         missing = []
         status = {"valid": True, "missing": []}
 
-        # Check critical settings
-        if not self.SUPABASE_URL:
-            missing.append("SUPABASE_URL")
-        if not self.SUPABASE_KEY:
-            missing.append("SUPABASE_KEY")
-
         # External services are optional but warned about
         if not self.VAPI_API_KEY:
-            logger.warning("VAPI_API_KEY not configured - Vapi integration disabled")
+            warnings.warn("VAPI_API_KEY not configured - Vapi integration disabled")
         if not self.TWILIO_PHONE_NUMBER:
-            logger.warning("TWILIO_PHONE_NUMBER not configured")
+            warnings.warn("TWILIO_PHONE_NUMBER not configured")
 
         if missing:
             status["valid"] = False
