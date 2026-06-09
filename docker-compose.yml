@@ -11,6 +11,7 @@ services:
       - VAPI_API_KEY=${VAPI_API_KEY:-your_vapi_api_key}
       - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER:-+1234567890}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
     volumes:
@@ -26,15 +27,13 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    volumes:
-      - ./apps/frontend:/app
     networks:
       - reachmagnets
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     networks:
