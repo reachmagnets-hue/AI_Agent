@@ -3,5 +3,8 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/apps/backend/venv/bin/python",
   "python.analysis.extraPaths": [
     "${workspaceFolder}/apps/backend"
-  ]
+  ],
+  "pyrefly.pythonInterpreter": "${workspaceFolder}/apps/backend/venv/bin/python",
+  "pyrefly.configPath": "${workspaceFolder}/pyrefly.toml",
+  "python.pyrefly.configPath": "${workspaceFolder}/pyrefly.toml"
 }

@@ -1,0 +1,7 @@
+{
+  "venvPath": "/home/chetan-patil/myprojects/Reach_Magnet/RM_sales_agent/reachmagnets-caller/apps/backend",
+  "venv": "venv",
+  "extraPaths": [
+    "/home/chetan-patil/myprojects/Reach_Magnet/RM_sales_agent/reachmagnets-caller/apps/backend"
+  ]
+}

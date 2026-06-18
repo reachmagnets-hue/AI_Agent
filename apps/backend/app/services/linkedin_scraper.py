@@ -2,7 +2,7 @@ import asyncio
 import uuid
 import structlog
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models.lead import Lead
@@ -17,7 +17,7 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     logger.warning("playwright not installed. LinkedIn scraper will run in simulated mode.")
 
-async def scrape_linkedin_leads(industry: str, limit: int = 50, campaign_id: str = None) -> Dict[str, Any]:
+async def scrape_linkedin_leads(industry: str, limit: int = 50, campaign_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Search and scrape LinkedIn profiles for the given industry.
     Finds CEOs/Founders/Owners in the target industry.
@@ -35,7 +35,7 @@ async def scrape_linkedin_leads(industry: str, limit: int = 50, campaign_id: str
     return await run_playwright_scrape(cookie, industry, limit, campaign_id)
 
 
-async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign_id: str = None) -> Dict[str, Any]:
+async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign_id: Optional[str] = None) -> Dict[str, Any]:
     """Scrape real LinkedIn results using Playwright browser automation"""
     scraped_leads = []
     errors_count = 0
@@ -182,7 +182,7 @@ async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign
     }
 
 
-async def run_simulated_scrape(industry: str, limit: int, campaign_id: str = None) -> Dict[str, Any]:
+async def run_simulated_scrape(industry: str, limit: int, campaign_id: Optional[str] = None) -> Dict[str, Any]:
     """Generates mock industry leads when Playwright is unavailable"""
     import random
     
