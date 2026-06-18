@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     RETELL_LLM_ID: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
 
+    # SMTP and LinkedIn settings
+    EMAIL_PROVIDER: str = "smtp"
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    LINKEDIN_SESSION_COOKIE: Optional[str] = None
+    LINKEDIN_DAILY_LIMIT: int = 100
 
     # Application URLs
     FRONTEND_URL: str = "http://localhost:3000"

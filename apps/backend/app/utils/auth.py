@@ -151,10 +151,10 @@ class AuthManager:
 
     def check_permission(self, user: User, required_scopes: list) -> bool:
         """Check if user has required permissions"""
-        user_scopes = set(user.scopes)
-        required_scopes = set(required_scopes)
+        user_scopes_set = set(user.scopes)
+        required_scopes_set = set(required_scopes)
 
-        return required_scopes.issubset(user_scopes)
+        return required_scopes_set.issubset(user_scopes_set)
 
     async def invalidate_token(self, token: str):
         """Invalidate a token (logout)"""

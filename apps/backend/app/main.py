@@ -15,7 +15,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import structlog
 
-from app.routers import campaigns, calls, webhooks, leads, appointments, retell_webhook
+from app.routers import campaigns, calls, webhooks, leads, appointments, retell_webhook, linkedin
 from app.core.config import get_settings
 from app.utils.logging import get_logger
 
@@ -113,6 +113,7 @@ app.include_router(calls.router, prefix="/api/v1", tags=["calls"])
 app.include_router(webhooks.router, prefix="/api", tags=["webhooks"])
 app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(appointments.router, prefix="/api/v1", tags=["appointments"])
+app.include_router(linkedin.router, prefix="/api/v1", tags=["linkedin"])
 app.include_router(retell_webhook.router)
 
 

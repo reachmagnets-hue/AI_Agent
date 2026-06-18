@@ -58,6 +58,11 @@ class Lead(Base):
     # AI generated lead summary
     ai_summary = Column(Text, nullable=True)
     
+    # LinkedIn Outreach fields
+    linkedin_url = Column(String(300), nullable=True)
+    linkedin_message = Column(Text, nullable=True)
+    linkedin_sent_at = Column(DateTime, nullable=True)
+    
     # Flags
     # Do Not Call
     is_dnc = Column(Boolean, default=False)

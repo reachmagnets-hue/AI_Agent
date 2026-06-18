@@ -562,7 +562,8 @@ async def extract_lead_from_screenshots(
     from app.core.config import get_settings
     from PIL import Image
     import json
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     from app.core.websocket import websocket_manager
     
     settings = get_settings()
@@ -574,15 +575,7 @@ async def extract_lead_from_screenshots(
             detail="GEMINI_API_KEY is not configured in backend settings. Please set it in your .env file."
         )
         
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        generation_config={
-            "response_mime_type": "application/json",
-            "response_schema": RESPONSE_SCHEMA
-        },
-        system_instruction=SYSTEM_INSTRUCTION
-    )
+    client = genai.Client(api_key=api_key)
     
     success_count = 0
     errors_count = 0
@@ -595,10 +588,18 @@ async def extract_lead_from_screenshots(
             image = Image.open(io.BytesIO(contents))
             
             # Send to Gemini
-            response = model.generate_content([
-                "Extract all available lead details from this Google Ads CRM screenshot.",
-                image
-            ])
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    "Extract all available lead details from this Google Ads CRM screenshot.",
+                    image
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=RESPONSE_SCHEMA,
+                    system_instruction=SYSTEM_INSTRUCTION
+                )
+            )
             
             if not response.text:
                 errors_count += 1
