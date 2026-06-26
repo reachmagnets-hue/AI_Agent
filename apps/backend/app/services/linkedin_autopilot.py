@@ -2,6 +2,7 @@ import asyncio
 import structlog
 from uuid import UUID
 from datetime import datetime
+from typing import Optional
 
 from app.core.database import SessionLocal
 from app.models.lead import Lead
@@ -13,26 +14,26 @@ from app.core.websocket import websocket_manager
 
 logger = structlog.get_logger(__name__)
 
-async def run_linkedin_autopilot(campaign_id: str, industry: str, limit: int):
+async def run_linkedin_autopilot(campaign_id: str, industry: str, limit: int, location: Optional[str] = None):
     """
     Unified background task to:
-    1. Scrape leads for the target industry and assign them to the campaign.
+    1. Scrape leads for the target industry and location and assign them to the campaign.
     2. Generate personalized LinkedIn messages using Gemini 2.5 Flash.
     3. Send connection invitations using Playwright.
     """
-    logger.info("Starting LinkedIn Autopilot run", campaign_id=campaign_id, industry=industry, limit=limit)
+    logger.info("Starting LinkedIn Autopilot run", campaign_id=campaign_id, industry=industry, limit=limit, location=location)
     
     # Broadcast start of scraping
     await websocket_manager.broadcast({
         "event": "autopilot_status",
         "campaign_id": campaign_id,
         "stage": "scraping",
-        "message": f"Starting lead discovery for '{industry}'..."
+        "message": f"Starting lead discovery for '{industry}' in '{location or 'Anywhere'}'..."
     })
 
     # Step 1: Scrape leads
     try:
-        scrape_res = await scrape_linkedin_leads(industry=industry, limit=limit, campaign_id=campaign_id)
+        scrape_res = await scrape_linkedin_leads(industry=industry, limit=limit, campaign_id=campaign_id, location=location)
         scraped_count = scrape_res.get("scraped", 0)
         logger.info("Autopilot Step 1 complete: Scraped leads", campaign_id=campaign_id, count=scraped_count)
         
@@ -70,13 +71,14 @@ async def run_linkedin_autopilot(campaign_id: str, industry: str, limit: int):
         logger.info("Autopilot: Generating messages for leads", campaign_id=campaign_id, count=len(lead_data))
         
         for idx, (lid, name, biz, ind) in enumerate(lead_data):
-            msg = await generate_linkedin_message(name, biz, ind)
+            msg = await generate_linkedin_message(str(name or ""), str(biz or ""), str(ind or ""))
             
             task_db = SessionLocal()
             try:
                 item = task_db.query(Lead).filter(Lead.id == lid).first()
                 if item:
-                    item.linkedin_message = msg
+                    item.linkedin_message = msg  # type: ignore
+                    item.linkedin_status = 'approved' # type: ignore
                     task_db.commit()
             except Exception as e:
                 logger.error("Error saving generated message", lead_id=str(lid), error=str(e))
@@ -137,9 +139,9 @@ def _update_campaign_status(campaign_id: str, status: str):
     try:
         campaign = db.query(Campaign).filter(Campaign.id == UUID(campaign_id)).first()
         if campaign:
-            campaign.status = status
+            campaign.status = status  # type: ignore
             if status == "completed":
-                campaign.completed_at = datetime.now()
+                campaign.completed_at = datetime.now()  # type: ignore
             db.commit()
     except Exception as e:
         logger.error("Failed to update campaign status during autopilot", campaign_id=campaign_id, error=str(e))

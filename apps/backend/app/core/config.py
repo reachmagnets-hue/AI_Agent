@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     CALCOM_API_KEY: Optional[str] = None
     CALCOM_EVENT_TYPE_ID: Optional[str] = None
+    GMEET_LINK: Optional[str] = None
     EVOLUTION_API_URL: Optional[str] = None
     EVOLUTION_API_KEY: Optional[str] = None
     EVOLUTION_INSTANCE: Optional[str] = None
@@ -43,6 +44,12 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
+    
+    # IMAP Config
+    IMAP_SERVER: Optional[str] = None
+    IMAP_USER: Optional[str] = None
+    IMAP_PASSWORD: Optional[str] = None
+
     LINKEDIN_SESSION_COOKIE: Optional[str] = None
     LINKEDIN_DAILY_LIMIT: int = 100
 

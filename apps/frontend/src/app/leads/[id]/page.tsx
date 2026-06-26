@@ -208,7 +208,7 @@ export default function LeadDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Cal.com Appointment Details Card */}
+          {/* Google Meet Appointment Details Card */}
           {appointments.length > 0 && (
             <Card className="bg-card border-purple-500/20 shadow-md">
               <CardHeader className="pb-2">
@@ -228,7 +228,7 @@ export default function LeadDetailPage() {
                     </p>
                     {appt.cal_meeting_link && (
                       <a href={appt.cal_meeting_link} target="_blank" rel="noopener noreferrer" className="text-purple-400 font-bold hover:underline block mt-1">
-                        Go to Cal.com Booking Link
+                        Go to Google Meet Link
                       </a>
                     )}
                   </div>

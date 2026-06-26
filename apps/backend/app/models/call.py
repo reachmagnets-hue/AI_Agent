@@ -32,10 +32,10 @@ class Call(Base):
     duration_seconds = Column(Integer, default=0)
     
     # Outcome
-    status = Column(String(50), default="initiated")
+    status = Column(String(50), default="initiated", index=True)
     # Values: initiated, ringing, in_progress, completed, no_answer, voicemail, failed, busy
     
-    outcome = Column(String(50), nullable=True)
+    outcome = Column(String(50), nullable=True, index=True)
     # Values: interested, not_interested, meeting_booked, callback_requested, voicemail_left, hung_up, error
     
     # Content
@@ -45,7 +45,7 @@ class Call(Base):
     objection_raised = Column(String(250), nullable=True)
     
     # Actions Taken
-    meeting_booked = Column(Boolean, default=False)
+    meeting_booked = Column(Boolean, default=False, index=True)
     sms_sent = Column(Boolean, default=False)
     email_sent = Column(Boolean, default=False)
     voicemail_dropped = Column(Boolean, default=False)
@@ -56,7 +56,7 @@ class Call(Base):
     # Attempt number
     attempt_number = Column(Integer, default=1)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     # Relationships
     lead = relationship("Lead", back_populates="calls")

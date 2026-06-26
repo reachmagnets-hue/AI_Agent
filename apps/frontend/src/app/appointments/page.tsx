@@ -96,7 +96,7 @@ export default function AppointmentsPage() {
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <Calendar className="h-8 w-8 text-primary" /> Discovery Meetings & Bookings
         </h1>
-        <p className="text-muted-foreground mt-1">Unified view of customer consultation meetings, synced from Cal.com.</p>
+        <p className="text-muted-foreground mt-1">Unified view of customer consultation meetings, synced from Google Meet.</p>
       </div>
 
       {/* Bookings Metrics Banner */}
@@ -214,7 +214,7 @@ export default function AppointmentsPage() {
                       <TableCell>
                         {appt.cal_meeting_link ? (
                           <a href={appt.cal_meeting_link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 text-xs">
-                            <Link2 className="h-3.5 w-3.5" /> Cal.com
+                            <Link2 className="h-3.5 w-3.5" /> Google Meet
                           </a>
                         ) : 'N/A'}
                       </TableCell>

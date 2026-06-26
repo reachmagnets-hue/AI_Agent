@@ -26,6 +26,7 @@ interface LinkedInStats {
 export default function LinkedInCampaigns() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [industry, setIndustry] = useState<string>('automotive');
+  const [location, setLocation] = useState<string>('');
   const [scrapeLimit, setScrapeLimit] = useState<number>(20);
   const [liAtCookie, setLiAtCookie] = useState<string>('');
   const [dailyLimit, setDailyLimit] = useState<number>(100);
@@ -35,6 +36,7 @@ export default function LinkedInCampaigns() {
   // Autopilot States
   const [activeTab, setActiveTab] = useState<'autopilot' | 'manual'>('autopilot');
   const [autopilotIndustry, setAutopilotIndustry] = useState<string>('automotive');
+  const [autopilotLocation, setAutopilotLocation] = useState<string>('');
   const [autopilotLimit, setAutopilotLimit] = useState<number>(10);
   const [autopilotLog, setAutopilotLog] = useState<string>('');
   const [autopilotStage, setAutopilotStage] = useState<string>('');
@@ -79,6 +81,7 @@ export default function LinkedInCampaigns() {
         limit: scrapeLimit.toString(),
         campaign_id: selectedCampaignId
       });
+      if (location) params.append('location', location);
       const response = await fetch(`/api/v1/linkedin/search?${params.toString()}`, {
         method: 'POST'
       });
@@ -140,13 +143,13 @@ export default function LinkedInCampaigns() {
     }
   });
 
-  // Autopilot execution mutation
   const autopilotMutation = useMutation({
     mutationFn: async () => {
       const params = new URLSearchParams({
         industry: autopilotIndustry,
         limit: autopilotLimit.toString()
       });
+      if (autopilotLocation) params.append('location', autopilotLocation);
       const response = await fetch(`/api/v1/linkedin/autopilot?${params.toString()}`, {
         method: 'POST'
       });
@@ -302,13 +305,22 @@ export default function LinkedInCampaigns() {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-600">Industry / Keyword</label>
                       <Input
                         value={autopilotIndustry}
                         onChange={(e) => setAutopilotIndustry(e.target.value)}
-                        placeholder="e.g. automotive, dentist, restaurant"
+                        placeholder="e.g. automotive, dentist"
+                        className="bg-white/80 border-slate-200 text-sm h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-600">Location (Optional)</label>
+                      <Input
+                        value={autopilotLocation}
+                        onChange={(e) => setAutopilotLocation(e.target.value)}
+                        placeholder="e.g. New York, CA"
                         className="bg-white/80 border-slate-200 text-sm h-9"
                       />
                     </div>
@@ -384,13 +396,22 @@ export default function LinkedInCampaigns() {
                         <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">Discovers CEOs, owners, and founders on LinkedIn in the target industry and adds them to this campaign.</p>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-bold text-slate-600">Industry / Keyword</label>
                           <Input 
                             value={industry} 
                             onChange={(e) => setIndustry(e.target.value)} 
-                            placeholder="e.g. automotive, dentist, restaurant"
+                            placeholder="e.g. automotive, dentist"
+                            className="bg-white/80 border-slate-200 text-sm h-9"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-600">Location (Optional)</label>
+                          <Input 
+                            value={location} 
+                            onChange={(e) => setLocation(e.target.value)} 
+                            placeholder="e.g. London, UK"
                             className="bg-white/80 border-slate-200 text-sm h-9"
                           />
                         </div>

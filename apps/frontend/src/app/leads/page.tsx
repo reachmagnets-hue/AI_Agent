@@ -192,6 +192,21 @@ export default function LeadsPage() {
     }
   };
 
+  const handleApproveLead = async (id: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/leads/${id}/approve`, { method: 'POST' });
+      if (res.ok) {
+        alert("Lead approved for LinkedIn outreach");
+        refetch();
+      } else {
+        const errorData = await res.json();
+        alert(`Error: ${errorData.detail || "Failed to approve lead"}`);
+      }
+    } catch (err) {
+      alert("Failed to approve lead");
+    }
+  };
+
   const handleUpload = () => {
     if (file) {
       setImportStatus('Uploading and filtering against DNC registry...');
@@ -501,6 +516,7 @@ export default function LeadsPage() {
                     <TableHead>Business Name</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>LI Status</TableHead>
                     <TableHead>Priority</TableHead>
                     <TableHead>Decision Maker</TableHead>
                     <TableHead>Score</TableHead>
@@ -518,6 +534,19 @@ export default function LeadsPage() {
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(lead.status)}`}>
                           {lead.status.replace('_', ' ')}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        {lead.linkedin_status && (
+                          <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider border whitespace-nowrap ${
+                            lead.linkedin_status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
+                            lead.linkedin_status === 'pending_approval' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                            lead.linkedin_status === 'connected' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                            lead.linkedin_status === 'message_sent' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                            'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                          }`}>
+                            {lead.linkedin_status.replace('_', ' ')}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">
                         <span className={getPriorityColor(lead.priority)}>{lead.priority}</span>
@@ -551,11 +580,18 @@ export default function LeadsPage() {
                         {lead.last_called_at ? new Date(lead.last_called_at).toLocaleString() : 'Never'}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Link href={`/leads/${lead.id}`}>
-                          <Button size="sm" variant="ghost" className="flex items-center gap-1 hover:text-primary">
-                            <Eye className="h-4 w-4" /> CRM Profile
-                          </Button>
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          {lead.linkedin_status === 'pending_approval' && (
+                            <Button size="sm" variant="outline" className="h-8 border-blue-500/50 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400" onClick={() => handleApproveLead(lead.id)}>
+                              Approve
+                            </Button>
+                          )}
+                          <Link href={`/leads/${lead.id}`}>
+                            <Button size="sm" variant="ghost" className="flex items-center gap-1 hover:text-primary">
+                              <Eye className="h-4 w-4" /> Profile
+                            </Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -17,7 +17,7 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     logger.warning("playwright not installed. LinkedIn scraper will run in simulated mode.")
 
-async def scrape_linkedin_leads(industry: str, limit: int = 50, campaign_id: Optional[str] = None) -> Dict[str, Any]:
+async def scrape_linkedin_leads(industry: str, limit: int = 50, campaign_id: Optional[str] = None, location: Optional[str] = None) -> Dict[str, Any]:
     """
     Search and scrape LinkedIn profiles for the given industry.
     Finds CEOs/Founders/Owners in the target industry.
@@ -25,17 +25,17 @@ async def scrape_linkedin_leads(industry: str, limit: int = 50, campaign_id: Opt
     settings = get_settings()
     cookie = settings.LINKEDIN_SESSION_COOKIE
     
-    logger.info("Starting LinkedIn lead search scraper", industry=industry, limit=limit, campaign_id=campaign_id)
+    logger.info("Starting LinkedIn lead search scraper", industry=industry, limit=limit, campaign_id=campaign_id, location=location)
     
     # Check if we should run simulated/mock scraping
     if not PLAYWRIGHT_AVAILABLE or not cookie or cookie == "your_linkedin_session_cookie":
         logger.info("Running LinkedIn scraping in SIMULATED mode (Playwright unavailable or li_at cookie missing)")
-        return await run_simulated_scrape(industry, limit, campaign_id)
+        return await run_simulated_scrape(industry, limit, campaign_id, location)
         
-    return await run_playwright_scrape(cookie, industry, limit, campaign_id)
+    return await run_playwright_scrape(cookie, industry, limit, campaign_id, location)
 
 
-async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign_id: Optional[str] = None) -> Dict[str, Any]:
+async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign_id: Optional[str] = None, location: Optional[str] = None) -> Dict[str, Any]:
     """Scrape real LinkedIn results using Playwright browser automation"""
     scraped_leads = []
     errors_count = 0
@@ -56,8 +56,10 @@ async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign
             
             page = await context.new_page()
             
-            # Format search query: Owner/Founder/CEO + Industry
+            # Format search query: Owner/Founder/CEO + Industry + Location
             search_query = f"Owner Founder CEO {industry}"
+            if location:
+                search_query += f" {location}"
             encoded_query = search_query.replace(" ", "%20")
             
             # Base LinkedIn People Search URL
@@ -74,50 +76,55 @@ async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign
                     
                     # Wait for results or empty state
                     try:
-                        await page.wait_for_selector(".reusable-search__result-container", timeout=10000)
+                        # Wait for anchor tags pointing to profiles
+                        await page.wait_for_selector("a[href*='/in/']", timeout=10000)
                     except Exception:
+                        # Check if we got redirected to auth/login because of invalid cookie
+                        if "login" in page.url or "auth" in page.url or await page.query_selector("input[id='username']"):
+                            raise Exception("LinkedIn session cookie (li_at) is invalid or expired. You have been redirected to the login page.")
+                            
                         logger.info("No search result selector found on this page. Ending pagination loop.")
                         break
                         
                     # Extract list of search result items
-                    results = await page.query_selector_all(".reusable-search__result-container")
-                    if not results:
+                    links = await page.query_selector_all("a[href*='/in/']")
+                    if not links:
                         logger.info("Search result container empty. Ending loop.")
                         break
                         
-                    for result in results:
+                    for link in links:
                         if len(scraped_leads) >= limit:
                             break
                             
                         try:
-                            # 1. Profile Link & Full Name
-                            title_elem = await result.query_selector(".entity-result__title-text a")
-                            if not title_elem:
+                            text = await link.inner_text()
+                            if not text or len(text.strip()) < 20 or "•" not in text:
                                 continue
                                 
-                            profile_url = await title_elem.get_attribute("href")
+                            profile_url = await link.get_attribute("href")
                             if not profile_url:
                                 continue
                             # Clean up tracking params
                             profile_url = profile_url.split("?")[0]
                             
-                            name_text = await title_elem.inner_text()
-                            # Clean up name: "Name\nView Name's profile"
-                            full_name = name_text.split("\n")[0].strip()
-                            
-                            # Skip outbound links out of linkedin or premium tags
-                            if "linkedin member" in full_name.lower():
+                            lines = [l.strip() for l in text.split("\n") if l.strip()]
+                            if len(lines) < 3:
                                 continue
                                 
-                            # 2. Headline / Job Title
-                            headline_elem = await result.query_selector(".entity-result__primary-subtitle")
-                            headline = await headline_elem.inner_text() if headline_elem else ""
-                            headline = headline.strip()
+                            # 1. Full Name
+                            full_name = lines[0].replace('•', '').strip()
                             
-                            # 3. Location
-                            location_elem = await result.query_selector(".entity-result__secondary-subtitle")
-                            location = await location_elem.inner_text() if location_elem else ""
-                            location = location.strip()
+                            # Skip outbound links out of linkedin or premium tags
+                            if "linkedin member" in full_name.lower() or "premium" in full_name.lower():
+                                continue
+                                
+                            # 2. Headline / Job Title & Location
+                            if '•' in lines[1]:
+                                headline = lines[2]
+                                location = lines[3] if len(lines) > 3 else ""
+                            else:
+                                headline = lines[1]
+                                location = lines[2] if len(lines) > 2 else ""
                             
                             # Extract company name from headline
                             business_name = f"{industry.capitalize()} Company"
@@ -182,7 +189,7 @@ async def run_playwright_scrape(cookie: str, industry: str, limit: int, campaign
     }
 
 
-async def run_simulated_scrape(industry: str, limit: int, campaign_id: Optional[str] = None) -> Dict[str, Any]:
+async def run_simulated_scrape(industry: str, limit: int, campaign_id: Optional[str] = None, location: Optional[str] = None) -> Dict[str, Any]:
     """Generates mock industry leads when Playwright is unavailable"""
     import random
     

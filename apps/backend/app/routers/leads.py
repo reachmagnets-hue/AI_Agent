@@ -29,6 +29,8 @@ def get_leads(
     called_to: Optional[date] = Query(None),
     has_meeting: Optional[bool] = Query(None),
     no_answer: Optional[bool] = Query(None),
+    has_linkedin: Optional[bool] = Query(None),
+    has_email: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(25, ge=1, le=100),
     sort_by: str = Query("created_at"),
@@ -86,6 +88,18 @@ def get_leads(
             query = query.filter(Lead.total_calls == 0)
         else:
             query = query.filter(Lead.total_calls > 0)
+
+    if has_linkedin is not None:
+        if has_linkedin:
+            query = query.filter(Lead.linkedin_url.isnot(None))
+        else:
+            query = query.filter(Lead.linkedin_url.is_(None))
+            
+    if has_email is not None:
+        if has_email:
+            query = query.filter(Lead.email.isnot(None))
+        else:
+            query = query.filter(Lead.email.is_(None))
 
     # Sort
     sort_column = getattr(Lead, sort_by, Lead.created_at)
@@ -433,6 +447,22 @@ async def import_leads_csv(
         "skipped_dnc": skipped_dnc,
         "errors": errors
     }
+
+@router.post("/{lead_id}/approve")
+def approve_lead(lead_id: UUID, db: Session = Depends(get_db)):
+    """Approve a lead for human-in-the-loop LinkedIn outreach"""
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.is_active == True).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    if lead.linkedin_status == "pending_approval":
+        lead.linkedin_status = "approved"
+        db.commit()
+        db.refresh(lead)
+        return {"message": "Lead approved for outreach", "linkedin_status": lead.linkedin_status}
+    else:
+        raise HTTPException(status_code=400, detail=f"Lead cannot be approved from current state: {lead.linkedin_status}")
+
 
 @router.patch("/{lead_id}")
 def update_lead(

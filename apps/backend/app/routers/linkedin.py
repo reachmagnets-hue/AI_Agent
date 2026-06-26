@@ -12,6 +12,7 @@ from app.services.linkedin_scraper import scrape_linkedin_leads
 from app.services.linkedin_sender import send_linkedin_campaign
 from app.utils.linkedin_generator import generate_linkedin_message
 from app.services.linkedin_autopilot import run_linkedin_autopilot
+from app.services.linkedin_inbox import sync_linkedin_inbox
 
 logger = structlog.get_logger(__name__)
 
@@ -19,13 +20,14 @@ router = APIRouter(prefix="/linkedin", tags=["linkedin"])
 
 @router.post("/search")
 async def trigger_linkedin_search(
+    background_tasks: BackgroundTasks,
     industry: str = Query(...),
     limit: int = Query(20, ge=1, le=100),
     campaign_id: Optional[str] = Query(None),
-    background_tasks: BackgroundTasks = None
+    location: Optional[str] = Query(None)
 ):
     """
-    Trigger Playwright lead discovery search for target industry.
+    Trigger Playwright lead discovery search for target industry and location.
     Imports discovered prospects into target campaign.
     """
     if campaign_id:
@@ -35,10 +37,10 @@ async def trigger_linkedin_search(
             raise HTTPException(status_code=400, detail="Invalid campaign ID UUID format")
 
     async def run_search_task():
-        await scrape_linkedin_leads(industry=industry, limit=limit, campaign_id=campaign_id)
+        await scrape_linkedin_leads(industry=industry, limit=limit, campaign_id=campaign_id, location=location)
         
     background_tasks.add_task(run_search_task)
-    return {"message": f"LinkedIn lead search for '{industry}' has been scheduled in the background.", "limit": limit}
+    return {"message": f"LinkedIn lead search for '{industry}' in '{location or 'Anywhere'}' has been scheduled.", "limit": limit}
 
 
 @router.post("/generate-messages")
@@ -69,13 +71,13 @@ async def generate_linkedin_messages_campaign(
     async def process_generation():
         logger.info("Starting bulk LinkedIn message generation", campaign_id=str(campaign_id), count=len(lead_data))
         for lid, name, biz, ind in lead_data:
-            msg = await generate_linkedin_message(name, biz, ind)
+            msg = await generate_linkedin_message(str(name or ""), str(biz or ""), str(ind or ""))
             
             task_db = SessionLocal()
             try:
                 item = task_db.query(Lead).filter(Lead.id == lid).first()
                 if item:
-                    item.linkedin_message = msg
+                    item.linkedin_message = msg  # type: ignore
                     task_db.commit()
             except Exception as e:
                 logger.error("Error saving generated message", lead_id=str(lid), error=str(e))
@@ -89,8 +91,8 @@ async def generate_linkedin_messages_campaign(
 @router.post("/start-campaign")
 async def start_linkedin_campaign_run(
     campaign_id: UUID,
+    background_tasks: BackgroundTasks,
     limit: int = Query(50, ge=1, le=200),
-    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -139,9 +141,10 @@ def get_linkedin_campaign_stats(campaign_id: UUID, db: Session = Depends(get_db)
 
 @router.post("/autopilot")
 async def trigger_linkedin_autopilot(
+    background_tasks: BackgroundTasks,
     industry: str = Query(...),
     limit: int = Query(20, ge=1, le=100),
-    background_tasks: BackgroundTasks = None,
+    location: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -151,20 +154,40 @@ async def trigger_linkedin_autopilot(
     """
     # Create a new campaign
     campaign_name = f"Autopilot - {industry.capitalize()} - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    if location:
+        campaign_name = f"Autopilot - {industry.capitalize()} ({location}) - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
     campaign = Campaign(
         name=campaign_name,
-        description=f"Automated end-to-end LinkedIn autopilot campaign for industry: {industry}",
+        description=f"Automated end-to-end LinkedIn autopilot campaign for industry: {industry} in location: {location or 'Anywhere'}",
         status="active"
     )
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
 
-    background_tasks.add_task(run_linkedin_autopilot, str(campaign.id), industry, limit)
+    background_tasks.add_task(run_linkedin_autopilot, str(campaign.id), industry, limit, location)
     
     return {
-        "message": f"LinkedIn Autopilot initiated for industry '{industry}'.",
+        "message": f"LinkedIn Autopilot initiated for industry '{industry}' in '{location or 'Anywhere'}'.",
         "campaign_id": str(campaign.id),
         "campaign_name": campaign_name
     }
+
+
+@router.post("/sync-inbox")
+async def trigger_linkedin_inbox_sync(background_tasks: BackgroundTasks):
+    """
+    Launch the AI Inbox Reviewer to scan LinkedIn messages and automatically extract meeting bookings.
+    """
+    async def run_sync():
+        await sync_linkedin_inbox()
+        
+    if background_tasks:
+        background_tasks.add_task(run_sync)
+        return {"message": "LinkedIn Inbox AI Sync scheduled in the background."}
+    else:
+        # Run synchronously if no background_tasks provided (for testing)
+        result = await sync_linkedin_inbox()
+        return result
 

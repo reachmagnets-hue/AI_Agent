@@ -21,7 +21,7 @@ class Lead(Base):
     full_name = Column(String(200), nullable=True)
     business_name = Column(String(200), nullable=True, index=True)
     phone = Column(String(20), nullable=False, index=True)
-    email = Column(String(200), nullable=True)
+    email = Column(String(200), nullable=True, index=True)
     website = Column(String(300), nullable=True)
     
     # Business Info
@@ -38,7 +38,7 @@ class Lead(Base):
     
     # CRM Status
     # Values: pending, calling, no_answer, voicemail, not_interested, interested, meeting_booked, follow_up, closed_won, closed_lost
-    status = Column(String(50), default="pending")
+    status = Column(String(50), default="pending", index=True)
     
     # (0-100)
     lead_score = Column(Integer, default=0)
@@ -59,14 +59,19 @@ class Lead(Base):
     ai_summary = Column(Text, nullable=True)
     
     # LinkedIn Outreach fields
-    linkedin_url = Column(String(300), nullable=True)
+    linkedin_url = Column(String(300), nullable=True, index=True)
     linkedin_message = Column(Text, nullable=True)
     linkedin_sent_at = Column(DateTime, nullable=True)
+    linkedin_status = Column(String(50), default="pending_approval", index=True)
+    
+    # Email Outreach fields
+    email_message = Column(Text, nullable=True)
+    email_sent_at = Column(DateTime, nullable=True)
     
     # Flags
     # Do Not Call
     is_dnc = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, index=True)
     opted_out = Column(Boolean, default=False)
     
     # Timestamps

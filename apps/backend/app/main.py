@@ -15,9 +15,10 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import structlog
 
-from app.routers import campaigns, calls, webhooks, leads, appointments, retell_webhook, linkedin
+from app.routers import campaigns, calls, webhooks, leads, appointments, retell_webhook, linkedin, emails
 from app.core.config import get_settings
 from app.utils.logging import get_logger
+from app.core.scheduler import scheduler
 
 # Get settings and logger
 settings = get_settings()
@@ -84,11 +85,16 @@ async def startup_event():
     except Exception as e:
         logger.error("Database connection error", exc_info=True)
 
+    # Start background hourly scheduler
+    scheduler.start()
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Application shutdown tasks"""
     logger.info("Shutting down Reach Magnets API")
+    # Stop background hourly scheduler
+    scheduler.stop()
 
 
 # Add middleware
@@ -114,6 +120,7 @@ app.include_router(webhooks.router, prefix="/api", tags=["webhooks"])
 app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(appointments.router, prefix="/api/v1", tags=["appointments"])
 app.include_router(linkedin.router, prefix="/api/v1", tags=["linkedin"])
+app.include_router(emails.router, prefix="/api/v1", tags=["emails"])
 app.include_router(retell_webhook.router)
 
 

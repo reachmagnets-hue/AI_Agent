@@ -9,7 +9,7 @@ from app.core.database import get_db, SessionLocal
 from app.models.call import Call
 from app.models.lead import Lead
 from app.models.appointment import Appointment
-from app.services import email_service, sms_service, whatsapp_service, calcom_service
+from app.services import email_service, sms_service, whatsapp_service, gmeet_service
 from app.core.websocket import websocket_manager
 
 router = APIRouter(prefix="/api/retell", tags=["retell"])
@@ -331,8 +331,8 @@ async def book_appointment_tool(request: Request):
     preferred_date = data.get("preferred_date", "")
     preferred_time = data.get("preferred_time", "")
     
-    # Book on Cal.com
-    booking = await calcom_service.book_slot(
+    # Book on Google Meet
+    booking = await gmeet_service.book_slot(
         name=name,
         email=email,
         date=preferred_date,

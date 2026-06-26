@@ -31,6 +31,18 @@ async function fetchUpcomingAppointments() {
   return response.json();
 }
 
+async function fetchLinkedInLeads() {
+  const response = await fetch(`/api/v1/leads?has_linkedin=true&limit=15`);
+  if (!response.ok) throw new Error('Failed to fetch linkedin leads');
+  return response.json();
+}
+
+async function fetchEmailLeads() {
+  const response = await fetch(`/api/v1/leads?has_email=true&limit=15`);
+  if (!response.ok) throw new Error('Failed to fetch email leads');
+  return response.json();
+}
+
 async function recampaignLead(leadId: string) {
   const response = await fetch(`/api/v1/leads/${leadId}?status=pending`, {
     method: 'PATCH',
@@ -40,7 +52,7 @@ async function recampaignLead(leadId: string) {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'recent' | 'unpicked'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'recent' | 'unpicked' | 'linkedin' | 'email'>('overview');
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -48,24 +60,42 @@ export default function Dashboard() {
     queryKey: ['dashboard-stats'],
     queryFn: fetchDashboardData,
     refetchInterval: 30000,
+    enabled: activeTab === 'overview'
   });
 
   const { data: recentCallsData, isLoading: isLoadingRecent } = useQuery({
     queryKey: ['recent-calls'],
     queryFn: fetchRecentCalls,
     refetchInterval: 30000,
+    enabled: activeTab === 'recent'
   });
 
   const { data: unpickedCallsData, isLoading: isLoadingUnpicked } = useQuery({
     queryKey: ['unpicked-calls'],
     queryFn: fetchUnpickedCalls,
     refetchInterval: 30000,
+    enabled: activeTab === 'unpicked'
   });
 
   const { data: upcomingAppointments, isLoading: isLoadingAppointments } = useQuery({
     queryKey: ['upcoming-appointments'],
     queryFn: fetchUpcomingAppointments,
     refetchInterval: 30000,
+    enabled: activeTab === 'overview'
+  });
+
+  const { data: linkedinLeadsData, isLoading: isLoadingLinkedin } = useQuery({
+    queryKey: ['linkedin-leads'],
+    queryFn: fetchLinkedInLeads,
+    refetchInterval: 30000,
+    enabled: activeTab === 'linkedin'
+  });
+
+  const { data: emailLeadsData, isLoading: isLoadingEmail } = useQuery({
+    queryKey: ['email-leads'],
+    queryFn: fetchEmailLeads,
+    refetchInterval: 30000,
+    enabled: activeTab === 'email'
   });
 
   const recampaignMutation = useMutation({
@@ -79,6 +109,23 @@ export default function Dashboard() {
     },
     onError: () => {
       alert("Failed to recampaign the lead. Please try again.");
+    }
+  });
+
+  const syncInboxMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/v1/emails/sync-inbox', { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to start sync');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      alert(`Inbox sync completed! Threads reviewed: ${data.threads_reviewed}, Bookings found: ${data.bookings_found}.`);
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['upcoming-appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['email-leads'] });
+    },
+    onError: (err: any) => {
+      alert(`Failed to sync inbox. Please check IMAP settings. ${err.message}`);
     }
   });
 
@@ -131,10 +178,22 @@ export default function Dashboard() {
           onClick={() => setActiveTab('unpicked')}
           className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'unpicked' ? 'bg-rose-100 text-rose-700 border-b-2 border-rose-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
         >
-          Unpicked / Failed Calls
+          Unpicked / Failed
           {(unpickedCallsData?.calls?.length > 0) && (
             <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{unpickedCallsData.calls.length}</span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveTab('linkedin')}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'linkedin' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
+        >
+          LinkedIn Messages
+        </button>
+        <button
+          onClick={() => setActiveTab('email')}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'email' ? 'bg-emerald-100 text-emerald-700 border-b-2 border-emerald-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
+        >
+          Email Leads
         </button>
       </div>
 
@@ -496,6 +555,212 @@ export default function Dashboard() {
                             </button>
                           </TableCell>
                         </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* LINKEDIN TAB */}
+      {activeTab === 'linkedin' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+          <Card className="shadow-md glass-card border-t-4 border-t-blue-500">
+            <CardHeader className="border-b border-slate-100 pb-4">
+              <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-500" /> LinkedIn Automation Output
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Leads that have been scraped and engaged via LinkedIn Autopilot.</p>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {isLoadingLinkedin ? (
+                <div className="p-8 text-center text-muted-foreground animate-pulse">Loading LinkedIn leads...</div>
+              ) : (
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead>Lead</TableHead>
+                        <TableHead>Business</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Sent At</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(!linkedinLeadsData?.leads || linkedinLeadsData.leads.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No LinkedIn leads found. Start a LinkedIn Autopilot campaign!
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      {linkedinLeadsData?.leads?.map((lead: any) => (
+                        <React.Fragment key={lead.id}>
+                          <TableRow className="hover:bg-blue-50/30 transition-colors">
+                            <TableCell className="font-semibold text-slate-800">
+                              {lead.full_name || 'Unknown'}
+                              <div className="text-[10px] text-blue-500 mt-1 truncate max-w-[150px]">
+                                <a href={lead.linkedin_url} target="_blank" rel="noreferrer" className="hover:underline">View Profile</a>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-slate-600">{lead.business_name}</TableCell>
+                            <TableCell>
+                              {lead.linkedin_sent_at ? (
+                                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold uppercase border border-emerald-200">
+                                  Delivered
+                                </span>
+                              ) : lead.linkedin_message ? (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold uppercase border border-blue-200">
+                                  Ready to Send
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md text-xs font-bold uppercase border border-amber-200">
+                                  Pending
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium text-slate-600">
+                              {lead.linkedin_sent_at ? new Date(lead.linkedin_sent_at).toLocaleString() : '--'}
+                            </TableCell>
+                            <TableCell className="text-right flex justify-end items-center">
+                              <button 
+                                onClick={() => toggleExpand(`linkedin-${lead.id}`)}
+                                className="text-blue-600 hover:text-blue-800 p-2 rounded-full hover:bg-blue-50 transition-colors"
+                              >
+                                {expandedCallId === `linkedin-${lead.id}` ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                          
+                          {expandedCallId === `linkedin-${lead.id}` && (
+                            <TableRow className="bg-slate-50/80">
+                              <TableCell colSpan={5} className="p-0 border-b">
+                                <div className="p-6">
+                                  <div className="bg-white p-5 rounded-xl border border-blue-100 shadow-sm max-w-3xl">
+                                    <h4 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-2">
+                                      <Sparkles className="h-4 w-4 text-blue-500" /> AI Message Draft
+                                    </h4>
+                                    <div className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg whitespace-pre-wrap font-medium border border-slate-200/60 shadow-inner">
+                                      {lead.linkedin_message || <span className="italic text-slate-400">The AI is currently generating a personalized message for this lead...</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* EMAIL TAB */}
+      {activeTab === 'email' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+          <Card className="shadow-md glass-card border-t-4 border-t-emerald-500">
+            <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Target className="h-5 w-5 text-emerald-500" /> Email Outreach & Deliveries
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">Leads with email addresses and their outreach delivery status.</p>
+              </div>
+              <button
+                onClick={() => syncInboxMutation.mutate()}
+                disabled={syncInboxMutation.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-50 shrink-0"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncInboxMutation.isPending ? 'animate-spin' : ''}`} />
+                {syncInboxMutation.isPending ? 'Syncing...' : 'AI Inbox Review'}
+              </button>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {isLoadingEmail ? (
+                <div className="p-8 text-center text-muted-foreground animate-pulse">Loading email leads...</div>
+              ) : (
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead>Lead</TableHead>
+                        <TableHead>Business</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Sent At</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(!emailLeadsData?.leads || emailLeadsData.leads.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No email leads found. Start an Email Campaign!
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      {emailLeadsData?.leads?.map((lead: any) => (
+                        <React.Fragment key={lead.id}>
+                          <TableRow className="hover:bg-emerald-50/30 transition-colors">
+                            <TableCell className="font-semibold text-slate-800">
+                              {lead.full_name || 'Unknown'}
+                              <div className="text-[10px] text-emerald-600 mt-1 truncate max-w-[150px]">
+                                <a href={`mailto:${lead.email}`} className="hover:underline">{lead.email}</a>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-slate-600">{lead.business_name || lead.phone}</TableCell>
+                            <TableCell>
+                              {lead.email_sent_at ? (
+                                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold uppercase border border-emerald-200">
+                                  Delivered
+                                </span>
+                              ) : lead.email_message ? (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold uppercase border border-blue-200">
+                                  Ready to Send
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md text-xs font-bold uppercase border border-amber-200">
+                                  Pending
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium text-slate-600">
+                              {lead.email_sent_at ? new Date(lead.email_sent_at).toLocaleString() : '--'}
+                            </TableCell>
+                            <TableCell className="text-right flex justify-end items-center">
+                              <button 
+                                onClick={() => toggleExpand(`email-${lead.id}`)}
+                                className="text-emerald-600 hover:text-emerald-800 p-2 rounded-full hover:bg-emerald-50 transition-colors"
+                              >
+                                {expandedCallId === `email-${lead.id}` ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                          
+                          {expandedCallId === `email-${lead.id}` && (
+                            <TableRow className="bg-slate-50/80">
+                              <TableCell colSpan={5} className="p-0 border-b">
+                                <div className="p-6">
+                                  <div className="bg-white p-5 rounded-xl border border-emerald-100 shadow-sm max-w-3xl">
+                                    <h4 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-2">
+                                      <Sparkles className="h-4 w-4 text-emerald-500" /> AI Email Draft
+                                    </h4>
+                                    <div className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg whitespace-pre-wrap font-medium border border-slate-200/60 shadow-inner">
+                                      {lead.email_message || <span className="italic text-slate-400">The AI is currently generating a personalized email for this lead...</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
                       ))}
                     </TableBody>
                   </Table>

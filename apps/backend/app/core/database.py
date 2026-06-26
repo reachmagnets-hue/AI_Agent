@@ -20,7 +20,15 @@ if not db_url:
     db_url = "sqlite:///./reachmagnets.db"
 
 if db_url.startswith("sqlite"):
+    from sqlalchemy import event
     engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
 else:
     engine = create_engine(db_url, pool_pre_ping=True)
 
