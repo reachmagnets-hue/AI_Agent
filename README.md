@@ -42,8 +42,11 @@ graph TD
 
 1. **AI Voice Calling (Retell AI)**: Dynamic outbound agent calls with objection-handling loops, compliant hours check by timezone, and mid-call appointment scheduler tool mapping.
 2. **AI Screenshot Lead OCR (Gemini 2.5 Flash)**: Upload Google Ads CRM screenshots directly. Gemini parses the details (business name, poc, email, phone, CID) and automatically creates/merges leads.
-3. **Multi-Channel Automation**: Confirms meetings, triggers follow-ups, and handles voice message outreach using Brevo (emails), Twilio (SMS), and WhatsApp wa.me click-to-chat links.
-4. **Command Center UI**: A dark Navy/Glassmorphic Next.js dashboard featuring timeline logs, audio playback nodes, CSV bulk lead uploading, and live status updates over WebSockets.
+3. **Niche-Specific Cold Email Outreach**: Automatically renders premium responsive HTML cards based on lead industry niches (such as a custom-tailored **Automotive** outreach layout focusing on local search visibility, map ranking, and mobile performance) with styled booking buttons linked directly to Cal.com calendar scheduling.
+4. **Consultative LinkedIn outreach with AI Personalization**: Personalizes long-form consultative intro messages using Gemini 2.5 Flash (dynamically adjusting names, companies, and industries) sent automatically once connection invitations are accepted on LinkedIn.
+5. **AI Inbox Reviewer & Periodic Sync**: Scrapes and reviews email and LinkedIn inbox messages, uses Gemini AI models to qualify responses (classifying leads into `booking_requested`, `interested`, `not_interested`), and automatically schedules appointments or records updates.
+6. **Multi-Channel Automation**: Confirms meetings, triggers follow-ups, and handles voice message outreach using Brevo (emails), Twilio (SMS), and WhatsApp wa.me click-to-chat links.
+7. **Command Center UI**: A dark Navy/Glassmorphic Next.js dashboard featuring timeline logs, audio playback nodes, CSV bulk lead uploading, and live status updates over WebSockets.
 
 ---
 
@@ -53,7 +56,7 @@ graph TD
 - **Core**: FastAPI (Python 3.11+)
 - **ORM / Database**: SQLAlchemy, SQLite (with fallback)
 - **APIs & SDKs**: Retell API, Google Generative AI (Gemini), Twilio SDK, sib-api-v3-sdk (Brevo)
-- **Monitoring**: Structured logging (Structlog), slowapi (rate-limiting)
+- **Monitoring & Scheduling**: Structured logging (Structlog), slowapi (rate-limiting), APScheduler (background sync tasks)
 
 ### Frontend
 - **Framework**: Next.js 14 (App Router), TypeScript
@@ -70,10 +73,10 @@ reachmagnets-caller/
 ├── apps/
 │   ├── backend/               # FastAPI Application
 │   │   ├── app/
-│   │   │   ├── core/          # Config, Database, WebSockets
+│   │   │   ├── core/          # Config, Database, WebSockets, Scheduler
 │   │   │   ├── models/        # SQLAlchemy Models (Lead, Call, etc.)
-│   │   │   ├── routers/       # REST Routes (Campaigns, Leads, Webhooks)
-│   │   │   ├── services/      # Service Integrations (Retell, Email, SMS)
+│   │   │   ├── routers/       # REST Routes (Campaigns, Leads, Emails, LinkedIn)
+│   │   │   ├── services/      # Service Integrations (Retell, Email, LinkedIn, Gmeet)
 │   │   │   └── utils/         # Automations, timezone compliance
 │   │   ├── db/                # Initial SQL schemas
 │   │   ├── requirements.txt   # Backend Dependencies
@@ -144,6 +147,10 @@ reachmagnets-caller/
 - `POST /api/v1/campaigns/{id}/start` - Launch background dialer queue
 - `POST /api/v1/campaigns/{id}/pause` - Pause dialing outreach
 
+### Emails & LinkedIn Sync
+- `POST /api/v1/emails/sync-inbox` - Trigger secure email IMAP mailbox synchronization and qualify replies
+- `POST /api/v1/linkedin/sync-inbox` - Check LinkedIn thread message replies and auto-schedule meetings
+
 ### Webhooks
 - `POST /api/retell/webhook` - Standard Retell webhook tracking call states and analysis outcomes
 - `POST /api/retell/book-appointment` - Mid-call AI slot scheduling hook
@@ -154,3 +161,4 @@ reachmagnets-caller/
 - **DNC Filtering**: All imported CSV lists are checked against the Do-Not-Call registry helper.
 - **Timezone Safety**: Outbound calls verify timezone dialing window compliancy rules before calling.
 - **Rate Limiting**: Built-in limit safety guards protect API routing from abuse.
+
