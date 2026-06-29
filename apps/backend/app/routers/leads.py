@@ -212,7 +212,7 @@ def get_lead(lead_id: UUID, db: Session = Depends(get_db)):
     appointments = db.query(Appointment).filter(Appointment.lead_id == lead_id).all()
     
     # Compile chronological timeline list
-    timeline = []
+    timeline: List[dict] = []
     timeline.append({
         "type": "import",
         "title": f"Lead imported from source: {lead.source}",
@@ -392,7 +392,7 @@ async def import_leads_csv(
             if existing:
                 # If a campaign_id is given and lead is unassigned, assign it
                 if campaign_id and existing.campaign_id is None:
-                    existing.campaign_id = campaign_id
+                    existing.campaign_id = campaign_id  # type: ignore
                     db.commit()
                 skipped_duplicate += 1
                 continue
@@ -456,7 +456,7 @@ def approve_lead(lead_id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Lead not found")
         
     if lead.linkedin_status == "pending_approval":
-        lead.linkedin_status = "approved"
+        lead.linkedin_status = "approved"  # type: ignore
         db.commit()
         db.refresh(lead)
         return {"message": "Lead approved for outreach", "linkedin_status": lead.linkedin_status}
@@ -480,13 +480,13 @@ def update_lead(
         raise HTTPException(status_code=404, detail="Lead not found")
         
     if status is not None:
-        lead.status = status
+        lead.status = status  # type: ignore
     if priority is not None:
-        lead.priority = priority
+        lead.priority = priority  # type: ignore
     if internal_notes is not None:
-        lead.internal_notes = internal_notes
+        lead.internal_notes = internal_notes  # type: ignore
     if next_call_at is not None:
-        lead.next_call_at = next_call_at
+        lead.next_call_at = next_call_at  # type: ignore
     if assigned_to is not None:
         lead.assigned_to = assigned_to
         
@@ -500,7 +500,7 @@ def delete_lead(lead_id: UUID, db: Session = Depends(get_db)):
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    lead.is_active = False
+    lead.is_active = False  # type: ignore
     db.commit()
     return {"message": "Lead soft deleted successfully"}
 
@@ -515,9 +515,9 @@ def add_lead_note(lead_id: UUID, note: str = Query(...), db: Session = Depends(g
     formatted_note = f"\n[{timestamp}] {note}"
     
     if lead.internal_notes:
-        lead.internal_notes += formatted_note
+        lead.internal_notes += formatted_note  # type: ignore
     else:
-        lead.internal_notes = formatted_note.strip()
+        lead.internal_notes = formatted_note.strip()  # type: ignore
         
     db.commit()
     db.refresh(lead)
@@ -620,7 +620,7 @@ async def extract_lead_from_screenshots(
             # Send to Gemini
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=[
+                contents=[  # type: ignore
                     "Extract all available lead details from this Google Ads CRM screenshot.",
                     image
                 ],
@@ -678,9 +678,9 @@ async def extract_lead_from_screenshots(
             if existing:
                 # Merge details
                 if not existing.full_name and poc:
-                    existing.full_name = poc
+                    existing.full_name = poc  # type: ignore
                 if email:
-                    existing.email = email if not existing.email else f"{existing.email}, {email}"
+                    existing.email = email if not existing.email else f"{existing.email}, {email}"  # type: ignore
                 
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 notes_addon = f"[AI Screenshot Extraction - {timestamp}]\n"
@@ -694,12 +694,18 @@ async def extract_lead_from_screenshots(
                     notes_addon += f"- Remarks: {remarks}\n"
                 
                 if existing.internal_notes:
-                    existing.internal_notes = notes_addon + "\n" + existing.internal_notes
+                    existing.internal_notes = notes_addon + "\n" + existing.internal_notes  # type: ignore
                 else:
-                    existing.internal_notes = notes_addon
+                    existing.internal_notes = notes_addon  # type: ignore
                     
                 db.commit()
-                results.append({"business_name": business, "status": "merged", "lead_id": str(existing.id)})
+                results.append({
+                    "business_name": business,
+                    "status": "merged",
+                    "lead_id": str(existing.id),
+                    "website": website or existing.website,
+                    "email": email or existing.email
+                })
             else:
                 # Create new lead
                 notes_body = f"[AI Screenshot Extraction]\n"
@@ -726,7 +732,13 @@ async def extract_lead_from_screenshots(
                 db.add(new_lead)
                 db.commit()
                 db.refresh(new_lead)
-                results.append({"business_name": business, "status": "created", "lead_id": str(new_lead.id)})
+                results.append({
+                    "business_name": business,
+                    "status": "created",
+                    "lead_id": str(new_lead.id),
+                    "website": website,
+                    "email": email
+                })
                 
             success_count += 1
             

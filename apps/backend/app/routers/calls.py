@@ -298,8 +298,8 @@ def cancel_call_log(call_id: UUID, db: Session = Depends(get_db)):
     call = db.query(Call).filter(Call.id == call_id).first()
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
-    call.status = "failed"
-    call.ended_at = datetime.now()
+    call.status = "failed"  # type: ignore
+    call.ended_at = datetime.now()  # type: ignore
     db.commit()
     return {"message": "Call log marked as cancelled"}
 

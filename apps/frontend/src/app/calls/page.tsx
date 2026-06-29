@@ -69,6 +69,15 @@ export default function CallsPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return 'text-red-500 font-semibold';
+      case 'high': return 'text-orange-500';
+      case 'normal': return 'text-gray-400';
+      default: return 'text-gray-400';
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -167,10 +176,16 @@ export default function CallsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Prospect Details</TableHead>
-                    <TableHead>Campaign ID</TableHead>
+                    <TableHead>Business Name</TableHead>
+                    <TableHead>Website</TableHead>
+                    <TableHead>LinkedIn</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Outcome</TableHead>
+                    <TableHead>LI Status</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Decision Maker</TableHead>
+                    <TableHead>Score</TableHead>
+                    <TableHead>Call Time</TableHead>
                     <TableHead>Audio Recording</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -179,36 +194,86 @@ export default function CallsPage() {
                   {calls.map((call: any) => (
                     <TableRow key={call.id} className="hover:bg-accent/40 transition-colors">
                       <TableCell className="font-semibold">
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-0.5">
                           <span className="font-bold text-foreground">{call.lead?.full_name || 'Prospect'}</span>
                           <span className="text-xs text-muted-foreground font-mono">{call.to_number || call.lead?.phone}</span>
+                          {call.lead?.email && (
+                            <span className="text-[10px] text-primary font-mono truncate max-w-[120px]">{call.lead.email}</span>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs font-mono">{call.campaign_id ? call.campaign_id.substring(0, 8) + '...' : 'Outbound Script'}</TableCell>
-                      <TableCell className="text-sm font-semibold">{formatDuration(call.duration_seconds || 0)}</TableCell>
+                      <TableCell>{call.lead?.business_name || 'N/A'}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm">
+                        {call.lead?.website ? (
+                          <a href={call.lead.website.startsWith('http') ? call.lead.website : `https://${call.lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[100px]" title={call.lead.website}>
+                            {call.lead.website}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">--</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {call.lead?.linkedin_url ? (
+                          <a href={call.lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-500 hover:underline font-medium text-xs truncate max-w-[100px]" title={call.lead.linkedin_url}>
+                            Profile
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">--</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm font-semibold whitespace-nowrap">{formatDuration(call.duration_seconds || 0)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-xs">
                           {getStatusIcon(call.status)}
                           <span className="capitalize">{call.status}</span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        {call.outcome ? (
-                          <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider ${getOutcomeColor(call.outcome)}`}>
-                            {call.outcome.replace('_', ' ')}
+                        {call.lead?.linkedin_status ? (
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border whitespace-nowrap ${
+                            call.lead.linkedin_status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
+                            call.lead.linkedin_status === 'pending_approval' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                            call.lead.linkedin_status === 'connected' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                            call.lead.linkedin_status === 'message_sent' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                            'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                          }`}>
+                            {call.lead.linkedin_status.replace('_', ' ')}
                           </span>
-                        ) : 'Pending'}
+                        ) : (
+                          <span className="text-muted-foreground text-xs">--</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs capitalize">
+                        <span className={getPriorityColor(call.lead?.priority || 'normal')}>{call.lead?.priority || 'normal'}</span>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const isDM = call.lead?.internal_notes?.includes("Decision Maker: Yes") ? "Yes" : 
+                                       call.lead?.internal_notes?.includes("Decision Maker: No") ? "No" : "Uncertain";
+                          if (isDM === "Yes") return <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-semibold">Yes</span>;
+                          if (isDM === "No") return <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-semibold">No</span>;
+                          return <span className="text-gray-400 text-xs">Uncertain</span>;
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
+                          <Star className="h-3 w-3 fill-current" />
+                          <span>{call.lead?.lead_score || 0}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap">
+                        {call.started_at ? new Date(call.started_at).toLocaleString() : new Date(call.created_at).toLocaleString()}
                       </TableCell>
                       <TableCell>
                         {call.recording_url ? (
-                          <audio src={call.recording_url} controls className="h-7 w-48 max-w-full text-xs" />
+                          <audio src={call.recording_url} controls className="h-6 w-32 max-w-full text-xs" />
                         ) : (
                           <span className="text-xs text-muted-foreground italic">No Recording</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         <Link href={`/leads/${call.lead_id}`}>
-                          <Button size="sm" variant="ghost" className="hover:text-primary">
+                          <Button size="sm" variant="ghost" className="hover:text-primary h-8 px-2 text-xs">
                             CRM Profile
                           </Button>
                         </Link>

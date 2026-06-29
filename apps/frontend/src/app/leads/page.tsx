@@ -9,11 +9,17 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Users, Search, Plus, Filter, Upload, AlertCircle, Eye, Star, Sparkles, X, Loader2, FileImage } from 'lucide-react';
 
-async function fetchLeads({ search, status, priority, page }: { search: string; status: string; priority: string; page: number }) {
+async function fetchLeads({ search, status, priority, page, leadTab }: { search: string; status: string; priority: string; page: number; leadTab: string }) {
   let url = `/api/v1/leads/?page=${page}&limit=15`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
   if (status && status !== 'all') url += `&status=${status}`;
   if (priority && priority !== 'all') url += `&priority=${priority}`;
+  
+  if (leadTab === 'email') {
+    url += '&has_email=true';
+  } else if (leadTab === 'linkedin') {
+    url += '&has_linkedin=true';
+  }
   
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch leads');
@@ -50,12 +56,15 @@ export default function LeadsPage() {
     file: File;
     status: 'ready' | 'processing' | 'success_created' | 'success_merged' | 'error';
     businessName?: string;
+    website?: string;
+    email?: string;
     error?: string;
   }
 
   const [screenshotQueue, setScreenshotQueue] = useState<QueueItem[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [leadTab, setLeadTab] = useState<'all' | 'phone' | 'email' | 'linkedin'>('all');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -147,7 +156,9 @@ export default function LeadsPage() {
           setScreenshotQueue(prev => prev.map(q => q.id === item.id ? { 
             ...q, 
             status, 
-            businessName: result.business_name || item.file.name 
+            businessName: result.business_name || item.file.name,
+            website: result.website || '',
+            email: result.email || ''
           } : q));
         } else {
           throw new Error('No details extracted from screenshot');
@@ -167,8 +178,8 @@ export default function LeadsPage() {
   };
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['leads', { search, status, priority, page }],
-    queryFn: () => fetchLeads({ search, status, priority, page }),
+    queryKey: ['leads', { search, status, priority, page, leadTab }],
+    queryFn: () => fetchLeads({ search, status, priority, page, leadTab }),
   });
 
   const importMutation = useMutation({
@@ -215,7 +226,10 @@ export default function LeadsPage() {
   };
 
   // Safe Fallback Leads data
-  const leads = data?.leads || [];
+  let leads = data?.leads || [];
+  if (leadTab === 'phone') {
+    leads = leads.filter((lead: any) => lead.phone && lead.phone !== '+1000000000');
+  }
   const total = data?.total || 0;
   const totalPages = data?.pages || 1;
   const stats = data?.stats || { total_pending: 0, total_interested: 0, total_booked: 0, total_not_interested: 0 };
@@ -414,6 +428,48 @@ export default function LeadsPage() {
                       </>
                     )}
                   </Button>
+
+                  {screenshotQueue.some(item => item.status === 'success_created' || item.status === 'success_merged') && (
+                    <div className="mt-4 p-3 bg-secondary/20 rounded-lg border border-muted-foreground/10 space-y-2">
+                      <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Sparkles className="h-3 w-3 text-primary animate-pulse" /> Extracted E-Mail & Web Directory
+                      </h4>
+                      <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                        {screenshotQueue
+                          .filter(item => item.status === 'success_created' || item.status === 'success_merged')
+                          .map((item) => (
+                            <div key={item.id} className="p-2 bg-background/50 rounded border border-muted-foreground/5 text-xs flex flex-col gap-1">
+                              <div className="flex justify-between items-center">
+                                <span className="font-semibold text-foreground">{item.businessName || 'N/A'}</span>
+                                <span className="text-[10px] uppercase font-bold text-primary px-1.5 py-0.2 rounded bg-primary/10">
+                                  {item.status === 'success_created' ? 'Created' : 'Merged'}
+                                </span>
+                              </div>
+                              {item.website && (
+                                <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <span className="font-medium text-slate-500">Website:</span>
+                                  <a href={item.website.startsWith('http') ? item.website : `https://${item.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                                    {item.website}
+                                  </a>
+                                </div>
+                              )}
+                              {item.email && (
+                                <div className="text-[10px] text-muted-foreground flex flex-col gap-0.5 mt-0.5">
+                                  <span className="font-medium text-slate-500">Extracted Emails:</span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {item.email.split(',').map((emailStr, idx) => (
+                                      <a key={idx} href={`mailto:${emailStr.trim()}`} className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono text-[9px] hover:bg-emerald-500/20 transition-colors">
+                                        {emailStr.trim()}
+                                      </a>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -447,6 +503,23 @@ export default function LeadsPage() {
             <p className="text-xs text-muted-foreground mt-1">Total System Leads</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Subsections/Tabs */}
+      <div className="flex space-x-2 border-b border-muted-foreground/10 pb-2">
+        {(['all', 'phone', 'email', 'linkedin'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => { setLeadTab(tab); setPage(1); }}
+            className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 capitalize whitespace-nowrap ${
+              leadTab === tab 
+                ? 'bg-primary/10 text-primary border-primary' 
+                : 'text-muted-foreground hover:bg-muted/10 hover:text-foreground border-transparent'
+            }`}
+          >
+            {tab} Leads
+          </button>
+        ))}
       </div>
 
       {/* Filter and Table Card */}
@@ -514,7 +587,10 @@ export default function LeadsPage() {
                   <TableRow>
                     <TableHead>Prospect Name</TableHead>
                     <TableHead>Business Name</TableHead>
+                    <TableHead>Website</TableHead>
                     <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>LinkedIn</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>LI Status</TableHead>
                     <TableHead>Priority</TableHead>
@@ -529,14 +605,41 @@ export default function LeadsPage() {
                     <TableRow key={lead.id} className="hover:bg-accent/40 transition-colors">
                       <TableCell className="font-semibold">{lead.full_name || 'N/A'}</TableCell>
                       <TableCell>{lead.business_name || 'N/A'}</TableCell>
-                      <TableCell className="text-sm font-mono">{lead.phone}</TableCell>
+                      <TableCell>
+                        {lead.website ? (
+                          <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[120px]" title={lead.website}>
+                            {lead.website}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">--</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm font-mono whitespace-nowrap">{lead.phone}</TableCell>
+                      <TableCell className="text-xs font-mono">
+                        {lead.email ? (
+                          <a href={`mailto:${lead.email}`} className="text-primary hover:underline truncate max-w-[120px] block" title={lead.email}>
+                            {lead.email}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">--</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {lead.linkedin_url ? (
+                          <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-500 hover:underline font-medium text-xs truncate max-w-[120px]" title={lead.linkedin_url}>
+                            View Profile
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">--</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(lead.status)}`}>
                           {lead.status.replace('_', ' ')}
                         </span>
                       </TableCell>
                       <TableCell>
-                        {lead.linkedin_status && (
+                        {lead.linkedin_status ? (
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider border whitespace-nowrap ${
                             lead.linkedin_status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
                             lead.linkedin_status === 'pending_approval' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
@@ -546,6 +649,8 @@ export default function LeadsPage() {
                           }`}>
                             {lead.linkedin_status.replace('_', ' ')}
                           </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">--</span>
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
@@ -576,7 +681,7 @@ export default function LeadsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {lead.last_called_at ? new Date(lead.last_called_at).toLocaleString() : 'Never'}
                       </TableCell>
                       <TableCell className="text-right">

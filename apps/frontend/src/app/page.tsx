@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Phone, BarChart3, CheckCircle, XCircle, Clock, ArrowUpRight, Zap, Target, Sparkles, ChevronDown, ChevronUp, RefreshCw, AlertCircle, Calendar } from 'lucide-react';
+import { Users, Phone, BarChart3, CheckCircle, XCircle, Clock, ArrowUpRight, Zap, Target, Sparkles, ChevronDown, ChevronUp, RefreshCw, AlertCircle, Calendar, Star, Eye } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
@@ -55,6 +55,40 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'recent' | 'unpicked' | 'linkedin' | 'email'>('overview');
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority || 'normal') {
+      case 'urgent': return 'text-red-500 font-semibold';
+      case 'high': return 'text-orange-500';
+      case 'normal': return 'text-gray-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status || 'pending') {
+      case 'pending': return 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20';
+      case 'calling': return 'bg-blue-500/10 text-blue-500 border border-blue-500/20';
+      case 'interested': return 'bg-green-500/10 text-green-500 border border-green-500/20';
+      case 'meeting_booked': return 'bg-purple-500/10 text-purple-500 border border-purple-500/20';
+      case 'not_interested': return 'bg-red-500/10 text-red-500 border border-red-500/20';
+      default: return 'bg-gray-500/10 text-gray-500 border border-gray-500/20';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="h-4 w-4 text-emerald-500" />;
+      case 'failed': return <XCircle className="h-4 w-4 text-rose-500" />;
+      default: return <Clock className="h-4 w-4 text-amber-500 animate-pulse" />;
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const { data: stats, isLoading, error } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -411,18 +445,24 @@ export default function Dashboard() {
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead>Lead</TableHead>
-                        <TableHead>Phone</TableHead>
+                        <TableHead>Prospect Details</TableHead>
+                        <TableHead>Business Name</TableHead>
+                        <TableHead>Website</TableHead>
+                        <TableHead>LinkedIn</TableHead>
                         <TableHead>Duration</TableHead>
-                        <TableHead>Outcome</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>LI Status</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Decision Maker</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>Call Time</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {recentCallsData?.calls?.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                             No recent calls found.
                           </TableCell>
                         </TableRow>
@@ -430,21 +470,76 @@ export default function Dashboard() {
                       {recentCallsData?.calls?.map((call: any) => (
                         <React.Fragment key={call.id}>
                           <TableRow className="hover:bg-indigo-50/30 transition-colors">
-                            <TableCell className="font-semibold text-slate-800">{call.lead?.full_name || 'Unknown'}</TableCell>
-                            <TableCell className="text-slate-600">{call.to_number}</TableCell>
-                            <TableCell className="font-medium text-slate-700">{call.duration_seconds}s</TableCell>
+                            <TableCell className="font-semibold text-slate-800">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-bold text-foreground">{call.lead?.full_name || 'Prospect'}</span>
+                                <span className="text-xs text-muted-foreground font-mono">{call.to_number || call.lead?.phone}</span>
+                                {call.lead?.email && (
+                                  <span className="text-[10px] text-primary font-mono truncate max-w-[120px]">{call.lead.email}</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>{call.lead?.business_name || 'N/A'}</TableCell>
                             <TableCell>
-                              {call.outcome === 'meeting_booked' && <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold uppercase">Booked</span>}
-                              {call.outcome === 'interested_callback' && <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md text-xs font-bold uppercase">Callback</span>}
-                              {call.outcome === 'voicemail' && <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-bold uppercase">Voicemail</span>}
-                              {call.outcome === 'no_answer' && <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md text-xs font-bold uppercase">No Answer</span>}
-                              {call.outcome === 'not_interested' && <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md text-xs font-bold uppercase">Not Interested</span>}
-                              {!call.outcome && <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-bold uppercase">N/A</span>}
+                              {call.lead?.website ? (
+                                <a href={call.lead.website.startsWith('http') ? call.lead.website : `https://${call.lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[100px]" title={call.lead.website}>
+                                  {call.lead.website}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
                             </TableCell>
                             <TableCell>
-                              <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${call.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
-                                {call.status}
-                              </span>
+                              {call.lead?.linkedin_url ? (
+                                <a href={call.lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-500 hover:underline font-medium text-xs truncate max-w-[100px]" title={call.lead.linkedin_url}>
+                                  Profile
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-medium text-slate-700">{call.duration_seconds}s</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-xs">
+                                {getStatusIcon(call.status)}
+                                <span className="capitalize">{call.status}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {call.lead?.linkedin_status ? (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border whitespace-nowrap ${
+                                  call.lead.linkedin_status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
+                                  call.lead.linkedin_status === 'pending_approval' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                  call.lead.linkedin_status === 'connected' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                  call.lead.linkedin_status === 'message_sent' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                  'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                                }`}>
+                                  {call.lead.linkedin_status.replace('_', ' ')}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs capitalize">
+                              <span className={getPriorityColor(call.lead?.priority || 'normal')}>{call.lead?.priority || 'normal'}</span>
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const isDM = call.lead?.internal_notes?.includes("Decision Maker: Yes") ? "Yes" : 
+                                             call.lead?.internal_notes?.includes("Decision Maker: No") ? "No" : "Uncertain";
+                                if (isDM === "Yes") return <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-semibold">Yes</span>;
+                                if (isDM === "No") return <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-semibold">No</span>;
+                                return <span className="text-gray-400 text-xs">Uncertain</span>;
+                              })()}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
+                                <Star className="h-3 w-3 fill-current" />
+                                <span>{call.lead?.lead_score || 0}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap">
+                              {call.started_at ? new Date(call.started_at).toLocaleString() : new Date(call.created_at).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right flex justify-end gap-2 items-center">
                               {call.outcome !== 'meeting_booked' && (
@@ -469,7 +564,7 @@ export default function Dashboard() {
                           </TableRow>
                           {expandedCallId === call.id && (
                             <TableRow className="bg-slate-50/80">
-                              <TableCell colSpan={6} className="p-0 border-b">
+                              <TableCell colSpan={12} className="p-0 border-b">
                                 <div className="p-6">
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -520,26 +615,97 @@ export default function Dashboard() {
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead>Lead</TableHead>
-                        <TableHead>Phone</TableHead>
+                        <TableHead>Prospect Details</TableHead>
+                        <TableHead>Business Name</TableHead>
+                        <TableHead>Website</TableHead>
+                        <TableHead>LinkedIn Profile</TableHead>
+                        <TableHead>CRM Status</TableHead>
+                        <TableHead>LI Status</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Decision Maker</TableHead>
+                        <TableHead>Score</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Reason</TableHead>
                         <TableHead className="text-right">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {unpickedCallsData?.calls?.length === 0 && (
+                      {(!unpickedCallsData?.calls || unpickedCallsData.calls.length === 0) && (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                             No unpicked or failed calls found! Great job.
                           </TableCell>
                         </TableRow>
                       )}
                       {unpickedCallsData?.calls?.map((call: any) => (
                         <TableRow key={call.id} className="hover:bg-rose-50/30 transition-colors">
-                          <TableCell className="font-semibold text-slate-800">{call.lead?.full_name || 'Unknown'}</TableCell>
-                          <TableCell className="text-slate-600">{call.to_number}</TableCell>
-                          <TableCell className="text-slate-500 text-sm">{new Date(call.started_at || call.created_at).toLocaleString()}</TableCell>
+                          <TableCell className="font-semibold text-slate-800">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-bold text-foreground">{call.lead?.full_name || 'Prospect'}</span>
+                              <span className="text-xs text-muted-foreground font-mono">{call.to_number || call.lead?.phone}</span>
+                              {call.lead?.email && (
+                                <span className="text-[10px] text-primary font-mono truncate max-w-[120px]">{call.lead.email}</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{call.lead?.business_name || 'N/A'}</TableCell>
+                          <TableCell>
+                            {call.lead?.website ? (
+                              <a href={call.lead.website.startsWith('http') ? call.lead.website : `https://${call.lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[100px]" title={call.lead.website}>
+                                {call.lead.website}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">--</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {call.lead?.linkedin_url ? (
+                              <a href={call.lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-500 hover:underline font-medium text-xs truncate max-w-[100px]" title={call.lead.linkedin_url}>
+                                Profile
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">--</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(call.lead?.status || 'failed')}`}>
+                              {(call.lead?.status || 'failed').replace('_', ' ')}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {call.lead?.linkedin_status ? (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border whitespace-nowrap ${
+                                call.lead.linkedin_status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
+                                call.lead.linkedin_status === 'pending_approval' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                call.lead.linkedin_status === 'connected' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                call.lead.linkedin_status === 'message_sent' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                              }`}>
+                                {call.lead.linkedin_status.replace('_', ' ')}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">--</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs capitalize">
+                            <span className={getPriorityColor(call.lead?.priority || 'normal')}>{call.lead?.priority || 'normal'}</span>
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const isDM = call.lead?.internal_notes?.includes("Decision Maker: Yes") ? "Yes" : 
+                                           call.lead?.internal_notes?.includes("Decision Maker: No") ? "No" : "Uncertain";
+                              if (isDM === "Yes") return <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-semibold">Yes</span>;
+                              if (isDM === "No") return <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-semibold">No</span>;
+                              return <span className="text-gray-400 text-xs">Uncertain</span>;
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
+                              <Star className="h-3 w-3 fill-current" />
+                              <span>{call.lead?.lead_score || 0}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-slate-500 text-xs whitespace-nowrap">{new Date(call.started_at || call.created_at).toLocaleString()}</TableCell>
                           <TableCell>
                             <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md text-xs font-bold uppercase border border-rose-200">
                               {call.outcome || call.status || 'Failed'}
@@ -573,7 +739,7 @@ export default function Dashboard() {
               <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-blue-500" /> LinkedIn Automation Output
               </CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">Leads that have been scraped and engaged via LinkedIn Autopilot.</p>
+              <p className="text-sm text-muted-foreground mt-1">Leads that have been engaged via LinkedIn Autopilot.</p>
             </CardHeader>
             <CardContent className="pt-4">
               {isLoadingLinkedin ? (
@@ -583,9 +749,15 @@ export default function Dashboard() {
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead>Lead</TableHead>
-                        <TableHead>Business</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Prospect Details</TableHead>
+                        <TableHead>Business Name</TableHead>
+                        <TableHead>Website</TableHead>
+                        <TableHead>LinkedIn Profile</TableHead>
+                        <TableHead>Automation Status</TableHead>
+                        <TableHead>LI CRM Status</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Decision Maker</TableHead>
+                        <TableHead>Score</TableHead>
                         <TableHead>Sent At</TableHead>
                         <TableHead className="text-right">Action</TableHead>
                       </TableRow>
@@ -593,7 +765,7 @@ export default function Dashboard() {
                     <TableBody>
                       {(!linkedinLeadsData?.leads || linkedinLeadsData.leads.length === 0) && (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                             No LinkedIn leads found. Start a LinkedIn Autopilot campaign!
                           </TableCell>
                         </TableRow>
@@ -602,12 +774,33 @@ export default function Dashboard() {
                         <React.Fragment key={lead.id}>
                           <TableRow className="hover:bg-blue-50/30 transition-colors">
                             <TableCell className="font-semibold text-slate-800">
-                              {lead.full_name || 'Unknown'}
-                              <div className="text-[10px] text-blue-500 mt-1 truncate max-w-[150px]">
-                                <a href={lead.linkedin_url} target="_blank" rel="noreferrer" className="hover:underline">View Profile</a>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-bold text-foreground">{lead.full_name || 'Prospect'}</span>
+                                <span className="text-xs text-muted-foreground font-mono">{lead.phone || 'N/A'}</span>
+                                {lead.email && (
+                                  <span className="text-[10px] text-primary font-mono truncate max-w-[120px]">{lead.email}</span>
+                                )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-slate-600">{lead.business_name}</TableCell>
+                            <TableCell>{lead.business_name || 'N/A'}</TableCell>
+                            <TableCell>
+                              {lead.website ? (
+                                <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[100px]" title={lead.website}>
+                                  {lead.website}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {lead.linkedin_url ? (
+                                <a href={lead.linkedin_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-500 hover:underline font-medium text-xs truncate max-w-[100px]" title={lead.linkedin_url}>
+                                  Profile
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
+                            </TableCell>
                             <TableCell>
                               {lead.linkedin_sent_at ? (
                                 <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold uppercase border border-emerald-200">
@@ -623,7 +816,40 @@ export default function Dashboard() {
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="text-sm font-medium text-slate-600">
+                            <TableCell>
+                              {lead.linkedin_status ? (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border whitespace-nowrap ${
+                                  lead.linkedin_status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
+                                  lead.linkedin_status === 'pending_approval' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                  lead.linkedin_status === 'connected' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                  lead.linkedin_status === 'message_sent' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                  'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                                }`}>
+                                  {lead.linkedin_status.replace('_', ' ')}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs capitalize">
+                              <span className={getPriorityColor(lead.priority || 'normal')}>{lead.priority || 'normal'}</span>
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const isDM = lead.internal_notes?.includes("Decision Maker: Yes") ? "Yes" : 
+                                             lead.internal_notes?.includes("Decision Maker: No") ? "No" : "Uncertain";
+                                if (isDM === "Yes") return <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-semibold">Yes</span>;
+                                if (isDM === "No") return <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-semibold">No</span>;
+                                return <span className="text-gray-400 text-xs">Uncertain</span>;
+                              })()}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
+                                <Star className="h-3 w-3 fill-current" />
+                                <span>{lead.lead_score || 0}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs font-medium text-slate-600 whitespace-nowrap">
                               {lead.linkedin_sent_at ? new Date(lead.linkedin_sent_at).toLocaleString() : '--'}
                             </TableCell>
                             <TableCell className="text-right flex justify-end items-center">
@@ -638,7 +864,7 @@ export default function Dashboard() {
                           
                           {expandedCallId === `linkedin-${lead.id}` && (
                             <TableRow className="bg-slate-50/80">
-                              <TableCell colSpan={5} className="p-0 border-b">
+                              <TableCell colSpan={11} className="p-0 border-b">
                                 <div className="p-6">
                                   <div className="bg-white p-5 rounded-xl border border-blue-100 shadow-sm max-w-3xl">
                                     <h4 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-2">
@@ -691,9 +917,15 @@ export default function Dashboard() {
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead>Lead</TableHead>
-                        <TableHead>Business</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Prospect Details</TableHead>
+                        <TableHead>Business Name</TableHead>
+                        <TableHead>Website</TableHead>
+                        <TableHead>LinkedIn Profile</TableHead>
+                        <TableHead>Outreach Status</TableHead>
+                        <TableHead>CRM Status</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Decision Maker</TableHead>
+                        <TableHead>Score</TableHead>
                         <TableHead>Sent At</TableHead>
                         <TableHead className="text-right">Action</TableHead>
                       </TableRow>
@@ -701,7 +933,7 @@ export default function Dashboard() {
                     <TableBody>
                       {(!emailLeadsData?.leads || emailLeadsData.leads.length === 0) && (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                             No email leads found. Start an Email Campaign!
                           </TableCell>
                         </TableRow>
@@ -710,12 +942,33 @@ export default function Dashboard() {
                         <React.Fragment key={lead.id}>
                           <TableRow className="hover:bg-emerald-50/30 transition-colors">
                             <TableCell className="font-semibold text-slate-800">
-                              {lead.full_name || 'Unknown'}
-                              <div className="text-[10px] text-emerald-600 mt-1 truncate max-w-[150px]">
-                                <a href={`mailto:${lead.email}`} className="hover:underline">{lead.email}</a>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-bold text-foreground">{lead.full_name || 'Prospect'}</span>
+                                <span className="text-xs text-muted-foreground font-mono">{lead.phone || 'N/A'}</span>
+                                {lead.email && (
+                                  <span className="text-[10px] text-primary font-mono truncate max-w-[120px]">{lead.email}</span>
+                                )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-slate-600">{lead.business_name || lead.phone}</TableCell>
+                            <TableCell>{lead.business_name || 'N/A'}</TableCell>
+                            <TableCell>
+                              {lead.website ? (
+                                <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[100px]" title={lead.website}>
+                                  {lead.website}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {lead.linkedin_url ? (
+                                <a href={lead.linkedin_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-500 hover:underline font-medium text-xs truncate max-w-[100px]" title={lead.linkedin_url}>
+                                  Profile
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">--</span>
+                              )}
+                            </TableCell>
                             <TableCell>
                               {lead.email_sent_at ? (
                                 <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold uppercase border border-emerald-200">
@@ -731,7 +984,30 @@ export default function Dashboard() {
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="text-sm font-medium text-slate-600">
+                            <TableCell>
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(lead.status)}`}>
+                                {lead.status.replace('_', ' ')}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-xs capitalize">
+                              <span className={getPriorityColor(lead.priority || 'normal')}>{lead.priority || 'normal'}</span>
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const isDM = lead.internal_notes?.includes("Decision Maker: Yes") ? "Yes" : 
+                                             lead.internal_notes?.includes("Decision Maker: No") ? "No" : "Uncertain";
+                                if (isDM === "Yes") return <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-semibold">Yes</span>;
+                                if (isDM === "No") return <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-semibold">No</span>;
+                                return <span className="text-gray-400 text-xs">Uncertain</span>;
+                              })()}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
+                                <Star className="h-3 w-3 fill-current" />
+                                <span>{lead.lead_score || 0}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm font-medium text-slate-600 whitespace-nowrap">
                               {lead.email_sent_at ? new Date(lead.email_sent_at).toLocaleString() : '--'}
                             </TableCell>
                             <TableCell className="text-right flex justify-end items-center">
@@ -746,13 +1022,13 @@ export default function Dashboard() {
                           
                           {expandedCallId === `email-${lead.id}` && (
                             <TableRow className="bg-slate-50/80">
-                              <TableCell colSpan={5} className="p-0 border-b">
+                              <TableCell colSpan={11} className="p-0 border-b">
                                 <div className="p-6">
                                   <div className="bg-white p-5 rounded-xl border border-emerald-100 shadow-sm max-w-3xl">
                                     <h4 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-2">
                                       <Sparkles className="h-4 w-4 text-emerald-500" /> AI Email Draft
                                     </h4>
-                                    <div className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg whitespace-pre-wrap font-medium border border-slate-200/60 shadow-inner">
+                                    <div className="text-sm text-slate-700 bg-slate-50/40 p-4 rounded-lg whitespace-pre-wrap font-medium border border-slate-200/60 shadow-inner">
                                       {lead.email_message || <span className="italic text-slate-400">The AI is currently generating a personalized email for this lead...</span>}
                                     </div>
                                   </div>
@@ -773,3 +1049,53 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
