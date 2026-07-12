@@ -289,7 +289,7 @@ export default function Dashboard() {
                 </div>
               </CardHeader>
               <CardContent className="pt-2">
-                <div className="text-3xl font-extrabold text-emerald-600">{displayStats.successRate || 78.5}%</div>
+                <div className="text-3xl font-extrabold text-emerald-600">{displayStats.successRate ?? 0}%</div>
                 <p className="text-xs text-muted-foreground mt-1 font-medium flex items-center gap-1">
                   Successful pitches / bookings
                 </p>
@@ -314,7 +314,7 @@ export default function Dashboard() {
                       <div>
                         <p className="text-xs text-muted-foreground font-semibold">Pitches Today</p>
                         <p className="text-lg font-bold text-slate-800">
-                          {displayStats.callsToday || 127}
+                          {displayStats.callsToday ?? 0}
                         </p>
                       </div>
                     </div>
@@ -328,7 +328,7 @@ export default function Dashboard() {
                       <div>
                         <p className="text-xs text-muted-foreground font-semibold">Active Queue</p>
                         <p className="text-lg font-bold text-slate-800">
-                          {displayStats.pendingCalls || 342}
+                          {displayStats.pendingCalls ?? 0}
                         </p>
                       </div>
                     </div>
@@ -342,7 +342,7 @@ export default function Dashboard() {
                       <div>
                         <p className="text-xs text-muted-foreground font-semibold">Failed Dials</p>
                         <p className="text-lg font-bold text-rose-600">
-                          {displayStats.failedCalls || 15}
+                          {displayStats.failedCalls ?? 0}
                         </p>
                       </div>
                     </div>
@@ -353,12 +353,18 @@ export default function Dashboard() {
                 <div className="mt-8 space-y-2">
                   <div className="flex justify-between text-xs font-semibold text-slate-600">
                     <span>Completed Conversations Progress</span>
-                    <span>{displayStats.callsToday || 127} / {((displayStats.callsToday || 127) + (displayStats.pendingCalls || 342))} Leads</span>
+                    <span>{displayStats.callsToday ?? 0} / {(displayStats.callsToday ?? 0) + (displayStats.pendingCalls ?? 0)} Leads</span>
                   </div>
                   <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 p-0.5">
                     <div 
                       className="h-full bg-gradient-to-r from-violet-500 via-indigo-500 to-pink-500 rounded-full" 
-                      style={{ width: `${Math.min(100, Math.round(((displayStats.callsToday || 127) / ((displayStats.callsToday || 127) + (displayStats.pendingCalls || 342))) * 100))}%` }}
+                      style={{ 
+                        width: `${
+                          (displayStats.callsToday ?? 0) + (displayStats.pendingCalls ?? 0) > 0 
+                            ? Math.min(100, Math.round(((displayStats.callsToday ?? 0) / ((displayStats.callsToday ?? 0) + (displayStats.pendingCalls ?? 0))) * 100))
+                            : 0
+                        }%` 
+                      }}
                     />
                   </div>
                 </div>

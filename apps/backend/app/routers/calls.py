@@ -14,13 +14,14 @@ from app.models.campaign import Campaign
 router = APIRouter(prefix="/calls", tags=["calls"])
 
 @router.get("/")
+@router.get("")
 def get_calls(
     lead_id: Optional[UUID] = Query(None),
     campaign_id: Optional[UUID] = Query(None),
     outcome: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    date_from: Optional[datetime] = Query(None),
-    date_to: Optional[datetime] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
     duration_min: Optional[int] = Query(None),
     duration_max: Optional[int] = Query(None),
     has_transcript: Optional[bool] = Query(None),
@@ -57,9 +58,9 @@ def get_calls(
         query = query.filter(status_filter)
         
     if date_from:
-        query = query.filter(Call.started_at >= date_from)
+        query = query.filter(Call.started_at >= datetime.combine(date_from, datetime.min.time()))
     if date_to:
-        query = query.filter(Call.started_at <= date_to)
+        query = query.filter(Call.started_at <= datetime.combine(date_to, datetime.max.time()))
         
     if duration_min:
         query = query.filter(Call.duration_seconds >= duration_min)
@@ -204,23 +205,33 @@ def get_calls_stats_overview(db: Session = Depends(get_db)):
     outcomes = db.query(Call.outcome, func.count(Call.id)).group_by(Call.outcome).all()
     by_outcome = {o: count for o, count in outcomes if o is not None}
 
-    # hourly activity for today
-    hourly_calls = [
-        {"hour": h, "calls": db.query(Call).filter(
-            Call.created_at >= today_start,
-            func.extract('hour', Call.created_at) == h
-        ).count()}
-        for h in range(8, 21)
-    ]
+    # hourly activity for today (done in Python to avoid 13 loops)
+    today_calls_ts = db.query(Call.created_at).filter(Call.created_at >= today_start).all()
+    hourly_counts = {h: 0 for h in range(8, 21)}
+    for (created_at,) in today_calls_ts:
+        if created_at:
+            h = created_at.hour
+            if h in hourly_counts:
+                hourly_counts[h] += 1
+    hourly_calls = [{"hour": h, "calls": count} for h, count in hourly_counts.items()]
 
-    # daily breakdown for this week
+    # daily breakdown for this week (done in Python to avoid 14 loops)
+    week_calls_ts = db.query(Call.created_at, Call.status).filter(Call.created_at >= week_start).all()
+    daily_stats = {i: {"calls": 0, "answered": 0} for i in range(7)}
+    for created_at, status in week_calls_ts:
+        if created_at:
+            day_idx = created_at.weekday()
+            if day_idx in daily_stats:
+                daily_stats[day_idx]["calls"] += 1
+                if status == "completed":
+                    daily_stats[day_idx]["answered"] += 1
+
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     by_day = []
     for i, day_name in enumerate(day_names[:7]):
-        d_start = week_start + timedelta(days=i)
-        d_end = d_start + timedelta(days=1)
-        d_total = db.query(Call).filter(Call.created_at >= d_start, Call.created_at < d_end).count()
-        d_answered = db.query(Call).filter(Call.created_at >= d_start, Call.created_at < d_end, Call.status == "completed").count()
+        stats = daily_stats[i]
+        d_total = stats["calls"]
+        d_answered = stats["answered"]
         answer_rate = round(d_answered / d_total, 2) if d_total > 0 else 0.0
         by_day.append({"day": day_name, "calls": d_total, "answer_rate": answer_rate})
 
@@ -262,8 +273,8 @@ def get_call_detail(call_id: UUID, db: Session = Depends(get_db)):
         time_offset = 0
         for line in lines:
             if not line.strip(): continue
-            speaker = "AI" if ("AI:" in line or "Sarah:" in line or "Alex:" in line) else "Prospect"
-            text = line.replace("AI:", "").replace("Sarah:", "").replace("Alex:", "").replace("Prospect:", "").strip()
+            speaker = "AI" if ("AI:" in line or "Sarah:" in line or "Alex:" in line or "Ojas:" in line) else "Prospect"
+            text = line.replace("AI:", "").replace("Sarah:", "").replace("Alex:", "").replace("Ojas:", "").replace("Prospect:", "").strip()
             
             # Simple simulation of conversation timing
             min_offset = time_offset // 60

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
@@ -20,7 +20,7 @@ class Lead(Base):
     # Identity
     full_name = Column(String(200), nullable=True)
     business_name = Column(String(200), nullable=True, index=True)
-    phone = Column(String(20), nullable=False, index=True)
+    phone = Column(String(20), nullable=True, index=True)
     email = Column(String(200), nullable=True, index=True)
     website = Column(String(300), nullable=True)
     
@@ -30,11 +30,12 @@ class Lead(Base):
     city = Column(String(100), nullable=True)
     state = Column(String(100), nullable=True)
     country = Column(String(10), default="US")
+    zip_code = Column(String(20), nullable=True)
     
     # Campaign Info
     campaign_id = Column(UUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True, index=True)
     source = Column(String(100), default="csv_upload")
-    imported_at = Column(DateTime, default=datetime.utcnow)
+    imported_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # CRM Status
     # Values: pending, calling, no_answer, voicemail, not_interested, interested, meeting_booked, follow_up, closed_won, closed_lost
@@ -75,8 +76,8 @@ class Lead(Base):
     opted_out = Column(Boolean, default=False)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     calls = relationship("Call", back_populates="lead")

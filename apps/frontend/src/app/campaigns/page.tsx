@@ -91,11 +91,15 @@ export default function CampaignsPage() {
         });
       }
 
-      // 1. Create campaign
-      const createRes = await fetch(`/api/v1/campaigns/${queryParams}`, {
+      // 1. Create campaign  (note: no trailing slash — Next.js rewrites /api/v1/campaigns directly)
+      const createRes = await fetch(`/api/v1/campaigns${queryParams}`, {
         method: 'POST',
       });
-      if (!createRes.ok) throw new Error('Failed to create campaign');
+      if (!createRes.ok) {
+        let detail = 'Failed to create campaign';
+        try { const j = await createRes.json(); detail = j.detail || detail; } catch {}
+        throw new Error(detail);
+      }
 
       // Reset
       setName('');

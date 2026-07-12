@@ -8,12 +8,21 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Phone, User, Clock, MessageCircle, CheckCircle, XCircle, PlayCircle, Search, Calendar, Star, AlertCircle, Volume2 } from 'lucide-react';
 import Link from 'next/link';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
-async function fetchCalls({ search, status, outcome, page }: { search: string; status: string; outcome: string; page: number }) {
+async function fetchCalls({ search, status, outcome, page, dateFrom, dateTo }: { search: string; status: string; outcome: string; page: number; dateFrom?: string; dateTo?: string }) {
   let url = `/api/v1/calls/?page=${page}&limit=15`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
   if (status && status !== 'all') url += `&status=${status}`;
   if (outcome && outcome !== 'all') url += `&outcome=${outcome}`;
+  if (dateFrom) url += `&date_from=${encodeURIComponent(dateFrom)}`;
+  if (dateTo) url += `&date_to=${encodeURIComponent(dateTo)}`;
   
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch call logs');
@@ -24,11 +33,14 @@ export default function CallsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [outcome, setOutcome] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedCall, setSelectedCall] = useState<any>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['calls', { search, status, outcome, page }],
-    queryFn: () => fetchCalls({ search, status, outcome, page }),
+    queryKey: ['calls', { search, status, outcome, page, dateFrom, dateTo }],
+    queryFn: () => fetchCalls({ search, status, outcome, page, dateFrom, dateTo }),
   });
 
   const { data: statsData } = useQuery({
@@ -118,22 +130,41 @@ export default function CallsPage() {
       {/* Search and Table */}
       <Card className="bg-card/30 backdrop-blur border-muted-foreground/10">
         <CardHeader>
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:w-96">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between">
+            <div className="relative w-full xl:w-80">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search transcripts, prospect name, phone..."
+                placeholder="Search transcripts, prospects..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="pl-9 bg-background"
+                className="pl-9 bg-background h-9"
               />
             </div>
             
-            <div className="flex gap-4 w-full md:w-auto justify-end">
+            <div className="flex flex-wrap md:flex-nowrap gap-3 items-center justify-start xl:justify-end w-full xl:w-auto">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground font-semibold whitespace-nowrap">From:</span>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                  className="bg-background h-9 text-xs w-36"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground font-semibold whitespace-nowrap">To:</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                  className="bg-background h-9 text-xs w-36"
+                />
+              </div>
+              
               <select
                 value={status}
                 onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-                className="bg-background border rounded px-2.5 py-1.5 text-sm"
+                className="bg-background border rounded px-2.5 py-1 text-sm h-9 w-full md:w-32"
               >
                 <option value="all">All Statuses</option>
                 <option value="initiated">Initiated</option>
@@ -146,7 +177,7 @@ export default function CallsPage() {
               <select
                 value={outcome}
                 onChange={(e) => { setOutcome(e.target.value); setPage(1); }}
-                className="bg-background border rounded px-2.5 py-1.5 text-sm"
+                className="bg-background border rounded px-2.5 py-1 text-sm h-9 w-full md:w-40"
               >
                 <option value="all">All Outcomes</option>
                 <option value="meeting_booked">Meeting Booked</option>
@@ -272,11 +303,21 @@ export default function CallsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Link href={`/leads/${call.lead_id}`}>
-                          <Button size="sm" variant="ghost" className="hover:text-primary h-8 px-2 text-xs">
-                            CRM Profile
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => setSelectedCall(call)}
+                            className="h-8 px-2 text-xs flex items-center gap-1 hover:bg-primary/20"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5 text-primary" /> Details
                           </Button>
-                        </Link>
+                          <Link href={`/leads/${call.lead_id}`}>
+                            <Button size="sm" variant="ghost" className="hover:text-primary h-8 px-2 text-xs">
+                              CRM Profile
+                            </Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -297,6 +338,111 @@ export default function CallsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Sheet open={!!selectedCall} onOpenChange={(open) => { if (!open) setSelectedCall(null); }}>
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto bg-card border-l border-muted-foreground/10 shadow-2xl">
+          {selectedCall && (
+            <div className="space-y-6">
+              <SheetHeader>
+                <div className="flex items-center gap-2 text-primary">
+                  <Phone className="h-5 w-5" />
+                  <span className="text-xs uppercase font-bold tracking-wider">Outbound Call Details</span>
+                </div>
+                <SheetTitle className="text-xl font-bold text-foreground">
+                  Call with {selectedCall.lead?.full_name || 'Prospect'}
+                </SheetTitle>
+                <SheetDescription className="text-xs text-muted-foreground">
+                  Placed on {selectedCall.started_at ? new Date(selectedCall.started_at).toLocaleString() : new Date(selectedCall.created_at).toLocaleString()}
+                </SheetDescription>
+              </SheetHeader>
+
+              {/* Call Summary / Audio Details Card */}
+              <div className="p-4 bg-muted/30 border border-muted-foreground/10 rounded-lg space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block">Business Name</span>
+                    <strong className="text-foreground text-sm">{selectedCall.lead?.business_name || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Phone Number</span>
+                    <strong className="text-foreground text-sm font-mono">{selectedCall.to_number || selectedCall.lead?.phone}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Duration</span>
+                    <strong className="text-foreground text-sm">{formatDuration(selectedCall.duration_seconds || 0)}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Outcome</span>
+                    <span className={`inline-block px-2 py-0.5 mt-0.5 rounded text-xs font-semibold capitalize border ${getOutcomeColor(selectedCall.outcome)}`}>
+                      {(selectedCall.outcome || 'unknown').replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                <hr className="border-muted-foreground/10" />
+
+                {/* Audio Recording */}
+                <div className="space-y-2">
+                  <span className="text-xs text-muted-foreground font-semibold block">Recording Playback</span>
+                  {selectedCall.recording_url ? (
+                    <audio src={selectedCall.recording_url} controls className="w-full h-9 rounded bg-background" />
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">No recording available for this call attempt.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Generated Call Summary */}
+              {selectedCall.ai_summary && (
+                <div className="p-4 bg-primary/5 border border-primary/10 rounded-lg space-y-1">
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider">AI Call Summary</h4>
+                  <p className="text-sm text-foreground italic leading-relaxed">
+                    "{selectedCall.ai_summary}"
+                  </p>
+                </div>
+              )}
+
+              {/* Transcript */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <MessageCircle className="h-4 w-4 text-primary" /> Full Interactive Transcript
+                </h4>
+                
+                <div className="max-h-[350px] overflow-y-auto p-4 bg-background border border-muted-foreground/10 rounded-lg space-y-3 font-sans leading-relaxed">
+                  {selectedCall.transcript ? (
+                    selectedCall.transcript.split('\n').map((line: string, lIdx: number) => {
+                      if (!line.trim()) return null;
+                      const isAI = line.startsWith('Sarah:') || line.startsWith('AI:') || line.startsWith('Alex:') || line.startsWith('Agent:');
+                      const agentLabel = line.startsWith('Alex:') ? 'Alex (Reach Magnets)' : 'Sarah (Reach Magnets)';
+                      const lineText = line.replace('Sarah:', '').replace('Alex:', '').replace('AI:', '').replace('Agent:', '').replace('Prospect:', '').trim();
+                      return (
+                        <div key={lIdx} className={`p-2.5 rounded-lg max-w-[85%] ${isAI ? 'bg-primary/10 mr-auto text-left border border-primary/10' : 'bg-muted ml-auto text-right border border-muted-foreground/10'}`}>
+                          <p className="font-bold text-[9px] uppercase tracking-wider mb-0.5 text-primary">{isAI ? agentLabel : selectedCall.lead?.full_name || 'Prospect'}</p>
+                          <p className="text-xs text-foreground">{lineText}</p>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-muted-foreground text-xs italic text-center py-8">No transcript available for this call attempt.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-3 pt-2">
+                <Link href={`/leads/${selectedCall.lead_id}`} className="flex-1">
+                  <Button className="w-full text-xs" variant="outline">
+                    View Complete CRM Profile
+                  </Button>
+                </Link>
+                <Button className="flex-1 text-xs" onClick={() => setSelectedCall(null)}>
+                  Close Details
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

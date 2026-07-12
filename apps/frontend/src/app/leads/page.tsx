@@ -19,6 +19,8 @@ async function fetchLeads({ search, status, priority, page, leadTab }: { search:
     url += '&has_email=true';
   } else if (leadTab === 'linkedin') {
     url += '&has_linkedin=true';
+  } else if (leadTab === 'phone') {
+    url += '&has_phone=true';
   }
   
   const res = await fetch(url);
@@ -185,14 +187,23 @@ export default function LeadsPage() {
   const importMutation = useMutation({
     mutationFn: uploadLeadsCSV,
     onSuccess: (resData) => {
-      setImportStatus(`Successfully imported ${resData.imported} leads! (Skipped ${resData.skipped_dnc} on DNC, ${resData.errors} errors)`);
+      if (resData.message) {
+        // Backend provided a custom message (email-only import, mixed import, etc.)
+        setImportStatus(resData.message);
+      } else {
+        const parts = [];
+        if (resData.imported_phone > 0) parts.push(`${resData.imported_phone} callable leads`);
+        if (resData.imported_email > 0) parts.push(`${resData.imported_email} email contacts`);
+        const importedStr = parts.length > 0 ? parts.join(' + ') : `${resData.imported} leads`;
+        setImportStatus(`✅ Imported ${importedStr}. (${resData.skipped_dnc ?? 0} DNC, ${resData.skipped_duplicate ?? 0} duplicates, ${resData.errors ?? 0} errors)`);
+      }
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['lead_sources'] });
       queryClient.invalidateQueries({ queryKey: ['unassigned_leads'] });
       setFile(null);
     },
     onError: (err: any) => {
-      setImportStatus(`Import failed: ${err.message}`);
+      setImportStatus(`❌ Import failed: ${err.message}`);
     }
   });
 
@@ -205,7 +216,7 @@ export default function LeadsPage() {
 
   const handleApproveLead = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/leads/${id}/approve`, { method: 'POST' });
+      const res = await fetch(`/api/v1/leads/${id}/approve`, { method: 'POST' });
       if (res.ok) {
         alert("Lead approved for LinkedIn outreach");
         refetch();
@@ -226,10 +237,7 @@ export default function LeadsPage() {
   };
 
   // Safe Fallback Leads data
-  let leads = data?.leads || [];
-  if (leadTab === 'phone') {
-    leads = leads.filter((lead: any) => lead.phone && lead.phone !== '+1000000000');
-  }
+  const leads = data?.leads || [];
   const total = data?.total || 0;
   const totalPages = data?.pages || 1;
   const stats = data?.stats || { total_pending: 0, total_interested: 0, total_booked: 0, total_not_interested: 0 };
@@ -587,6 +595,7 @@ export default function LeadsPage() {
                   <TableRow>
                     <TableHead>Prospect Name</TableHead>
                     <TableHead>Business Name</TableHead>
+                    <TableHead>Campaign</TableHead>
                     <TableHead>Website</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
@@ -606,6 +615,15 @@ export default function LeadsPage() {
                       <TableCell className="font-semibold">{lead.full_name || 'N/A'}</TableCell>
                       <TableCell>{lead.business_name || 'N/A'}</TableCell>
                       <TableCell>
+                        {lead.campaign_name ? (
+                          <span className="font-medium text-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs">
+                            {lead.campaign_name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs italic">Unassigned</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {lead.website ? (
                           <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[120px]" title={lead.website}>
                             {lead.website}
@@ -614,14 +632,16 @@ export default function LeadsPage() {
                           <span className="text-muted-foreground text-xs">--</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm font-mono whitespace-nowrap">{lead.phone}</TableCell>
+                      <TableCell className="text-sm font-mono whitespace-nowrap">
+                        {lead.phone || <span className="text-muted-foreground italic text-xs">No Phone</span>}
+                      </TableCell>
                       <TableCell className="text-xs font-mono">
                         {lead.email ? (
                           <a href={`mailto:${lead.email}`} className="text-primary hover:underline truncate max-w-[120px] block" title={lead.email}>
                             {lead.email}
                           </a>
                         ) : (
-                          <span className="text-muted-foreground">--</span>
+                          <span className="text-muted-foreground italic text-xs">No Email</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -634,12 +654,12 @@ export default function LeadsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(lead.status)}`}>
-                          {lead.status.replace('_', ' ')}
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(lead.status || 'pending')}`}>
+                          {(lead.status || 'pending').replace('_', ' ')}
                         </span>
                       </TableCell>
                       <TableCell>
-                        {lead.linkedin_status ? (
+                        {lead.linkedin_url && lead.linkedin_status ? (
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider border whitespace-nowrap ${
                             lead.linkedin_status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
                             lead.linkedin_status === 'pending_approval' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
@@ -686,9 +706,9 @@ export default function LeadsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {lead.linkedin_status === 'pending_approval' && (
+                          {lead.linkedin_status === 'pending_approval' && lead.linkedin_url && (
                             <Button size="sm" variant="outline" className="h-8 border-blue-500/50 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400" onClick={() => handleApproveLead(lead.id)}>
-                              Approve
+                              Approve LinkedIn
                             </Button>
                           )}
                           <Link href={`/leads/${lead.id}`}>

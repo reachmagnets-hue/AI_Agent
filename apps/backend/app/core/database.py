@@ -89,11 +89,14 @@ def create_supabase_client() -> Optional['Client']:
         return None
 
 
+_supabase_client: Optional['Client'] = None
+
 def get_supabase() -> Optional['Client']:
     """Get Supabase client (with lazy initialization)"""
-    if not hasattr(get_supabase, '_client'):
-        get_supabase._client = create_supabase_client()
-    return get_supabase._client
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_supabase_client()
+    return _supabase_client
 
 
 async def test_connection() -> bool:

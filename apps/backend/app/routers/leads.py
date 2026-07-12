@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, desc, func, case
 from typing import List, Optional
 from datetime import datetime, date
@@ -17,6 +17,7 @@ from app.utils.dnc import is_on_dnc_registry
 router = APIRouter(prefix="/leads", tags=["leads"])
 
 @router.get("/")
+@router.get("")
 def get_leads(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -31,6 +32,7 @@ def get_leads(
     no_answer: Optional[bool] = Query(None),
     has_linkedin: Optional[bool] = Query(None),
     has_email: Optional[bool] = Query(None),
+    has_phone: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(25, ge=1, le=100),
     sort_by: str = Query("created_at"),
@@ -101,6 +103,15 @@ def get_leads(
         else:
             query = query.filter(Lead.email.is_(None))
 
+    if has_phone is not None:
+        if has_phone:
+            query = query.filter(Lead.phone.isnot(None))
+        else:
+            query = query.filter(Lead.phone.is_(None))
+
+    # Eager load campaign relationship
+    query = query.options(joinedload(Lead.campaign))
+
     # Sort
     sort_column = getattr(Lead, sort_by, Lead.created_at)
     if sort_order.lower() == "desc":
@@ -112,16 +123,27 @@ def get_leads(
     pages = (total + limit - 1) // limit
     leads = query.offset((page - 1) * limit).limit(limit).all()
 
-    # Calculate status counts for stats block
+    # Serialize leads to plain dicts including campaign_name
+    serialized_leads = []
+    for lead in leads:
+        lead_dict = {c.name: getattr(lead, c.name) for c in lead.__table__.columns}
+        lead_dict["campaign_name"] = lead.campaign.name if lead.campaign else None
+        serialized_leads.append(lead_dict)
+
+    # Calculate status counts for stats block using single group-by query
+    status_counts = db.query(Lead.status, func.count(Lead.id))\
+        .filter(Lead.is_active == True, Lead.status.in_(["pending", "interested", "meeting_booked", "not_interested"]))\
+        .group_by(Lead.status).all()
+    counts_map = {status: count for status, count in status_counts}
     stats = {
-        "total_pending": db.query(Lead).filter(Lead.is_active == True, Lead.status == "pending").count(),
-        "total_interested": db.query(Lead).filter(Lead.is_active == True, Lead.status == "interested").count(),
-        "total_booked": db.query(Lead).filter(Lead.is_active == True, Lead.status == "meeting_booked").count(),
-        "total_not_interested": db.query(Lead).filter(Lead.is_active == True, Lead.status == "not_interested").count(),
+        "total_pending": counts_map.get("pending", 0),
+        "total_interested": counts_map.get("interested", 0),
+        "total_booked": counts_map.get("meeting_booked", 0),
+        "total_not_interested": counts_map.get("not_interested", 0),
     }
 
     return {
-        "leads": leads,
+        "leads": serialized_leads,
         "total": total,
         "page": page,
         "pages": pages,
@@ -140,19 +162,19 @@ def get_leads_overview_stats(db: Session = Depends(get_db)):
     by_status = {s: c for s, c in status_counts}
     
     # By campaign (SQLite-compatible: no Integer cast needed)
-    campaign_rows = db.query(Campaign.name, func.count(Lead.id))\
-        .join(Lead, Lead.campaign_id == Campaign.id)\
-        .filter(Lead.is_active == True)\
-        .group_by(Campaign.name).all()
+    from sqlalchemy import case
+    campaign_rows = db.query(
+        Campaign.name,
+        func.count(Lead.id).label("total"),
+        func.sum(case((Lead.status == "meeting_booked", 1), else_=0)).label("booked")
+    ).join(Lead, Lead.campaign_id == Campaign.id)\
+     .filter(Lead.is_active == True)\
+     .group_by(Campaign.name).all()
     
-    by_campaign = []
-    for name, total in campaign_rows:
-        booked = db.query(Lead).filter(
-            Lead.campaign_id.isnot(None),
-            Lead.status == "meeting_booked",
-            Lead.is_active == True
-        ).count()
-        by_campaign.append({"campaign_name": name, "total": total, "booked": booked})
+    by_campaign = [
+        {"campaign_name": name, "total": total, "booked": int(booked or 0)}
+        for name, total, booked in campaign_rows
+    ]
     
     # Daily counts
     from datetime import timedelta
@@ -305,7 +327,14 @@ async def import_leads_csv(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """Import CSV file of leads, enforce DNC filter, deduplication, and format verification"""
+    """Import CSV file of leads, enforce DNC filter, deduplication, and format verification.
+    
+    Smart auto-detection:
+    - Phone-only list (no header): all rows treated as phone numbers
+    - Email-only list: imported as email-only leads (phone = null, status = email_only)
+    - Mixed list: phone leads imported normally, email-only rows stored for email outreach
+    - Unknown column names: auto-detects phone/email values by pattern
+    """
     contents = await file.read()
     try:
         decoded = contents.decode('utf-8-sig')
@@ -318,16 +347,56 @@ async def import_leads_csv(
                 detail="Unable to decode CSV file. Please save it as UTF-8 format."
             )
 
-    buffer = io.StringIO(decoded)
-    reader = csv.DictReader(buffer)
+    # ── Helper predicates ───────────────────────────────────────────────────
+    def _is_phone_like(val: str) -> bool:
+        s = val.strip()
+        if not s or len(s) > 25:
+            return False
+        digits = ''.join(filter(str.isdigit, s))
+        return 7 <= len(digits) <= 15
 
-    imported = 0
+    def _is_email_like(val: str) -> bool:
+        s = val.strip()
+        if '@' not in s:
+            return False
+        parts = s.split('@')
+        return len(parts) == 2 and '.' in parts[1] and len(parts[0]) > 0
+
+    # ── Detect CSV format by peeking at the first row ───────────────────────
+    peek_buf = io.StringIO(decoded)
+    peek_reader = csv.reader(peek_buf)
+    first_row = next(peek_reader, [])
+    non_empty_first = [v for v in first_row if v.strip()]
+
+    phone_only_no_header = bool(non_empty_first) and all(_is_phone_like(v) for v in non_empty_first)
+    email_only_no_header = bool(non_empty_first) and all(_is_email_like(v) for v in non_empty_first)
+
+    # Build the rows iterable
+    if phone_only_no_header:
+        all_rows_iter = []
+        for raw_row in csv.reader(io.StringIO(decoded)):
+            for cell in raw_row:
+                if cell.strip():
+                    all_rows_iter.append({"phone": cell.strip()})
+    elif email_only_no_header:
+        all_rows_iter = []
+        for raw_row in csv.reader(io.StringIO(decoded)):
+            for cell in raw_row:
+                if cell.strip():
+                    all_rows_iter.append({"email": cell.strip()})
+    else:
+        reader = csv.DictReader(io.StringIO(decoded))
+        all_rows_iter = list(reader)
+
+    # ── Import settings ─────────────────────────────────────────────────────
+    imported_phone = 0
+    imported_email = 0
     skipped_dnc = 0
     skipped_duplicate = 0
     errors = 0
-    seen_phones: set = set()  # Track phones seen in THIS batch to handle in-file duplicates
+    seen_phones: set = set()
+    seen_emails: set = set()
 
-    # Detect country prefix from configured Twilio number
     from app.core.config import get_settings
     settings = get_settings()
     twilio_num = settings.TWILIO_PHONE_NUMBER or ""
@@ -337,15 +406,22 @@ async def import_leads_csv(
     elif twilio_num.startswith("+1"):
         default_prefix = "1"
 
-    for row in reader:
+    for row in all_rows_iter:
         try:
-            # Normalize all column keys to lowercase stripped
-            clean_row = {}
+            clean_row: dict = {}
             for k, v in row.items():
                 if k is not None:
                     clean_row[k.strip().lower()] = (v or "").strip()
 
-            # Accept multiple header name variants for phone
+            # Resolve email
+            email = (
+                clean_row.get("email") or
+                clean_row.get("email address") or
+                clean_row.get("e-mail") or
+                next((v for v in clean_row.values() if _is_email_like(v)), "")
+            )
+
+            # Resolve phone
             phone_raw = (
                 clean_row.get("phone") or
                 clean_row.get("phone number") or
@@ -356,97 +432,153 @@ async def import_leads_csv(
                 clean_row.get("contact") or ""
             )
             if not phone_raw:
-                errors += 1
-                continue
+                for col_key, col_val in clean_row.items():
+                    if col_val and _is_phone_like(col_val) and not _is_email_like(col_val):
+                        phone_raw = col_val
+                        break
 
-            # Strip ALL non-digit characters except leading +
-            has_plus = phone_raw.strip().startswith("+")
-            digits = ''.join(filter(str.isdigit, phone_raw))
-            if not digits or len(digits) < 7:
-                errors += 1
-                continue
-
-            # Smart country code formatting
-            if has_plus:
-                formatted_phone = f"+{digits}"
-            elif len(digits) == 10 and default_prefix:
-                # 10-digit local number → prepend country code
-                formatted_phone = f"+{default_prefix}{digits}"
-            elif len(digits) == 12 and default_prefix == "91" and digits.startswith("91"):
-                # Already has 91 prefix without +
-                formatted_phone = f"+{digits}"
-            elif len(digits) == 11 and default_prefix == "1" and digits.startswith("1"):
-                formatted_phone = f"+{digits}"
-            else:
-                formatted_phone = f"+{digits}"
-
-            # ── Deduplication check ──────────────────────────────────────────
-            # Check 1: already seen in this batch
-            if formatted_phone in seen_phones:
-                skipped_duplicate += 1
-                continue
-            seen_phones.add(formatted_phone)
-            
-            # Check 2: already exists in the database
-            existing = db.query(Lead).filter(Lead.phone == formatted_phone, Lead.is_active == True).first()
-            if existing:
-                # If a campaign_id is given and lead is unassigned, assign it
-                if campaign_id and existing.campaign_id is None:
-                    existing.campaign_id = campaign_id  # type: ignore
-                    db.commit()
-                skipped_duplicate += 1
-                continue
-
-            # DNC compliance check
-            if await is_on_dnc_registry(formatted_phone):
-                skipped_dnc += 1
-                continue
-
-            # Accept multiple header variants for other fields
+            # Resolve other fields
             full_name = (
-                clean_row.get("name") or
-                clean_row.get("full name") or
-                clean_row.get("prospect name") or
-                clean_row.get("contact name") or ""
+                clean_row.get("name") or clean_row.get("full name") or
+                clean_row.get("prospect name") or clean_row.get("contact name") or ""
             )
             business_name = (
-                clean_row.get("business") or
-                clean_row.get("business name") or
-                clean_row.get("company") or
-                clean_row.get("company name") or
+                clean_row.get("business") or clean_row.get("business name") or
+                clean_row.get("company") or clean_row.get("company name") or
                 clean_row.get("organization") or ""
             )
-            email = clean_row.get("email") or clean_row.get("email address") or ""
             website = clean_row.get("website") or clean_row.get("site") or clean_row.get("url") or ""
             business_type = clean_row.get("business type") or clean_row.get("industry") or clean_row.get("category") or ""
             city = clean_row.get("city") or clean_row.get("location") or ""
             state = clean_row.get("state") or clean_row.get("region") or ""
 
-            lead = Lead(
-                full_name=full_name or None,
-                business_name=business_name or None,
-                phone=formatted_phone,
-                email=email or None,
-                website=website or None,
-                business_type=business_type or None,
-                city=city or None,
-                state=state or None,
-                campaign_id=campaign_id,
-                status="pending",
-                source=file.filename[:100] if file.filename else "csv_upload"
-            )
-            db.add(lead)
-            imported += 1
+            if not phone_raw and not email:
+                errors += 1
+                continue
+
+            # PATH A: Has phone number
+            if phone_raw:
+                has_plus = phone_raw.strip().startswith("+")
+                digits = ''.join(filter(str.isdigit, phone_raw))
+                if not digits or len(digits) < 7:
+                    if email:
+                        # Fall through to email path
+                        phone_raw = ""
+                    else:
+                        errors += 1
+                        continue
+
+            if phone_raw:
+                has_plus = phone_raw.strip().startswith("+")
+                digits = ''.join(filter(str.isdigit, phone_raw))
+                if has_plus:
+                    formatted_phone = f"+{digits}"
+                elif len(digits) == 10 and default_prefix:
+                    formatted_phone = f"+{default_prefix}{digits}"
+                elif len(digits) == 12 and default_prefix == "91" and digits.startswith("91"):
+                    formatted_phone = f"+{digits}"
+                elif len(digits) == 11 and default_prefix == "1" and digits.startswith("1"):
+                    formatted_phone = f"+{digits}"
+                else:
+                    formatted_phone = f"+{digits}"
+
+                if formatted_phone in seen_phones:
+                    skipped_duplicate += 1
+                    continue
+                seen_phones.add(formatted_phone)
+
+                existing = db.query(Lead).filter(Lead.phone == formatted_phone, Lead.is_active == True).first()
+                if existing:
+                    if campaign_id and existing.campaign_id is None:
+                        existing.campaign_id = campaign_id  # type: ignore
+                        db.commit()
+                    skipped_duplicate += 1
+                    continue
+
+                if await is_on_dnc_registry(formatted_phone):
+                    skipped_dnc += 1
+                    continue
+
+                lead = Lead(
+                    full_name=full_name or None,
+                    business_name=business_name or None,
+                    phone=formatted_phone,
+                    email=email or None,
+                    website=website or None,
+                    business_type=business_type or None,
+                    city=city or None,
+                    state=state or None,
+                    campaign_id=campaign_id,
+                    status="pending",
+                    source=file.filename[:100] if file.filename else "csv_upload"
+                )
+                db.add(lead)
+                imported_phone += 1
+                continue
+
+            # PATH B: Email only (no valid phone)
+            if email:
+                email_lower = email.lower()
+                if email_lower in seen_emails:
+                    skipped_duplicate += 1
+                    continue
+                seen_emails.add(email_lower)
+
+                existing_email = db.query(Lead).filter(
+                    Lead.email == email_lower, Lead.is_active == True
+                ).first()
+                if existing_email:
+                    if campaign_id and existing_email.campaign_id is None:
+                        existing_email.campaign_id = campaign_id  # type: ignore
+                        db.commit()
+                    skipped_duplicate += 1
+                    continue
+
+                lead = Lead(
+                    full_name=full_name or None,
+                    business_name=business_name or None,
+                    phone=None,
+                    email=email_lower,
+                    website=website or None,
+                    business_type=business_type or None,
+                    city=city or None,
+                    state=state or None,
+                    campaign_id=campaign_id,
+                    status="email_only",
+                    source=file.filename[:100] if file.filename else "csv_upload"
+                )
+                db.add(lead)
+                imported_email += 1
+
         except Exception as exc:
             errors += 1
 
     db.commit()
-    return {
-        "imported": imported,
+
+    total_imported = imported_phone + imported_email
+    result: dict = {
+        "imported": total_imported,
+        "imported_phone": imported_phone,
+        "imported_email": imported_email,
         "skipped_duplicate": skipped_duplicate,
         "skipped_dnc": skipped_dnc,
         "errors": errors
     }
+
+    if imported_email > 0 and imported_phone == 0:
+        result["info"] = "email_only"
+        result["message"] = (
+            f"\u2705 Imported {imported_email} email contacts for Email Outreach. "
+            "These leads have no phone number so they cannot be called, but are visible in the Leads page."
+        )
+    elif imported_email > 0 and imported_phone > 0:
+        result["message"] = (
+            f"\u2705 Imported {imported_phone} callable leads + {imported_email} email-only contacts."
+        )
+
+    return result
+
+
 
 @router.post("/{lead_id}/approve")
 def approve_lead(lead_id: UUID, db: Session = Depends(get_db)):

@@ -8,6 +8,7 @@ Production-ready FastAPI application with security, monitoring, and logging.
 import time
 from typing import Callable
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -44,31 +45,9 @@ structlog.configure(
 )
 
 
-def create_application() -> FastAPI:
-    """Application factory for creating configured FastAPI instances"""
-
-    app = FastAPI(
-        title="Reach Magnets AI Voice Calling Agent API",
-        description="""
-        Production-ready API for automating outbound AI voice calls with
-        comprehensive campaign management, real-time analytics, and webhook integration.
-        """,
-        version="1.2.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
-    )
-
-    return app
-
-
-# Create application instance
-app = create_application()
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Application startup tasks"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events (startup/shutdown)"""
     logger.info("Starting Reach Magnets AI Voice Calling Agent API")
 
     # Log configuration
@@ -87,14 +66,49 @@ async def startup_event():
 
     # Start background hourly scheduler
     scheduler.start()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Application shutdown tasks"""
+    
+    # Register webhook with Retell dynamically if public URL is configured
+    if settings.RETELL_API_KEY and settings.RETELL_API_KEY != "your_retell_api_key" and settings.BASE_URL and "localhost" not in settings.BASE_URL:
+        try:
+            import asyncio
+            from app.services.retell_service import register_webhook
+            webhook_url = f"{settings.BASE_URL}/api/retell/webhook"
+            logger.info(f"Registering Retell webhook dynamically to {webhook_url}")
+            asyncio.create_task(register_webhook(webhook_url))
+        except Exception as e:
+            logger.error(f"Failed to dynamically register Retell webhook: {e}")
+    
+    yield
+    
     logger.info("Shutting down Reach Magnets API")
     # Stop background hourly scheduler
     scheduler.stop()
+
+
+def create_application() -> FastAPI:
+    """Application factory for creating configured FastAPI instances"""
+
+    app = FastAPI(
+        title="Reach Magnets AI Voice Calling Agent API",
+        description="""
+        Production-ready API for automating outbound AI voice calls with
+        comprehensive campaign management, real-time analytics, and webhook integration.
+        """,
+        version="1.2.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        lifespan=lifespan,
+    )
+
+    return app
+
+
+# Create application instance
+app = create_application()
+
+
+
 
 
 # Add middleware

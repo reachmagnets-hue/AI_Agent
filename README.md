@@ -41,12 +41,14 @@ graph TD
 ## 🚀 Key Features
 
 1. **AI Voice Calling (Retell AI)**: Dynamic outbound agent calls with objection-handling loops, compliant hours check by timezone, and mid-call appointment scheduler tool mapping.
-2. **AI Screenshot Lead OCR (Gemini 2.5 Flash)**: Upload Google Ads CRM screenshots directly. Gemini parses the details (business name, poc, email, phone, CID) and automatically creates/merges leads.
-3. **Niche-Specific Cold Email Outreach**: Automatically renders premium responsive HTML cards based on lead industry niches (such as a custom-tailored **Automotive** outreach layout focusing on local search visibility, map ranking, and mobile performance) with styled booking buttons linked directly to Cal.com calendar scheduling.
-4. **Consultative LinkedIn outreach with AI Personalization**: Personalizes long-form consultative intro messages using Gemini 2.5 Flash (dynamically adjusting names, companies, and industries) sent automatically once connection invitations are accepted on LinkedIn.
-5. **AI Inbox Reviewer & Periodic Sync**: Scrapes and reviews email and LinkedIn inbox messages, uses Gemini AI models to qualify responses (classifying leads into `booking_requested`, `interested`, `not_interested`), and automatically schedules appointments or records updates.
-6. **Multi-Channel Automation**: Confirms meetings, triggers follow-ups, and handles voice message outreach using Brevo (emails), Twilio (SMS), and WhatsApp wa.me click-to-chat links.
-7. **Command Center UI**: A dark Navy/Glassmorphic Next.js dashboard featuring timeline logs, audio playback nodes, CSV bulk lead uploading, and live status updates over WebSockets.
+2. **Time-Gated Campaign Scheduling**: Restricts campaign runs to specific high-conversion hours (**8:00 PM – 10:00 PM**, **12:00 AM – 1:00 AM**, and **3:00 AM – 4:00 AM IST**). The system places dialers on standby outside these hours and auto-resumes them when the next window opens.
+3. **Interactive Call History & Transcripts**: Premium activity logs dashboard allowing date filtering, MP3 call recording playback, and full interactive conversational transcripts mapped to custom side drawers.
+4. **AI Screenshot Lead OCR (Gemini 2.5 Flash)**: Upload Google Ads CRM screenshots directly. Gemini parses the details (business name, poc, email, phone, CID) and automatically creates/merges leads.
+5. **Niche-Specific Cold Email Outreach**: Automatically renders premium responsive HTML cards based on lead industry niches (such as a custom-tailored **Automotive** outreach layout focusing on local search visibility, map ranking, and mobile performance) with styled booking buttons linked directly to Cal.com calendar scheduling.
+6. **Consultative LinkedIn outreach with AI Personalization**: Personalizes long-form consultative intro messages using Gemini 2.5 Flash (dynamically adjusting names, companies, and industries) sent automatically once connection invitations are accepted on LinkedIn.
+7. **AI Inbox Reviewer & Periodic Sync**: Scrapes and reviews email and LinkedIn inbox messages, uses Gemini AI models to qualify responses (classifying leads into `booking_requested`, `interested`, `not_interested`), and automatically schedules appointments or records updates.
+8. **Multi-Channel Automation**: Confirms meetings, triggers follow-ups, and handles voice message outreach using Brevo (emails), Twilio (SMS), and WhatsApp wa.me click-to-chat links.
+9. **Command Center UI**: A dark Navy/Glassmorphic Next.js dashboard featuring timeline logs, audio playback nodes, CSV bulk lead uploading, and live status updates over WebSockets.
 
 ---
 
@@ -96,41 +98,32 @@ reachmagnets-caller/
 
 ## ⚙️ Quick Start Setup
 
-### 1. Backend Configuration
-1. Navigate to the backend directory:
+### Setup Configurations
+1. Copy the backend environment variables template and customize:
    ```bash
-   cd apps/backend
+   cp apps/backend/.env.example apps/backend/.env
    ```
-2. Copy the environment variables template and customize:
-   ```bash
-   cp .env.example .env
-   ```
-3. Set your API credentials:
+2. Set your API credentials in `apps/backend/.env`:
    - `RETELL_API_KEY` & `RETELL_AGENT_ID`
    - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER`
    - `BREVO_API_KEY`, `SENDER_EMAIL`, and `SENDER_NAME`
    - `GEMINI_API_KEY`
    - `CALCOM_API_KEY` and `CALCOM_EVENT_TYPE_ID`
-4. Run the development server:
-   ```bash
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload
-   ```
 
-### 2. Frontend Configuration
-1. Navigate to the frontend directory:
+### Running the Complete Stack (FastAPI + Next.js + Cloudflare Tunnels)
+To easily run the frontend and backend servers together with dynamic Cloudflare tunnels:
+1. Make sure you have python-dependencies installed in the backend virtualenv.
+2. Run the master startup script:
    ```bash
-   cd ../frontend
+   python apps/backend/scratch/run_and_tunnel.py
    ```
-2. Set up environment variables:
-   ```bash
-   cp .env.example .env.local
-   ```
-3. Start the Next.js development server:
-   ```bash
-   npm install
-   npm run dev
-   ```
+*This script will:*
+- Launch a Cloudflare tunnel for the FastAPI backend (`http://localhost:8000`).
+- Parse the dynamic Cloudflare URL and write it to `BASE_URL` in `apps/backend/.env`.
+- Boot the backend uvicorn server (which dynamically registers the tunnel webhook URL with Retell).
+- Configure the frontend's API variables in `apps/frontend/.env.local`.
+- Start the Next.js development server on port `3001` and expose it via a second Cloudflare tunnel.
+- Output the public dashboard URL!
 
 ---
 
@@ -159,6 +152,7 @@ reachmagnets-caller/
 
 ## 🔒 Security & Compliance
 - **DNC Filtering**: All imported CSV lists are checked against the Do-Not-Call registry helper.
-- **Timezone Safety**: Outbound calls verify timezone dialing window compliancy rules before calling.
-- **Rate Limiting**: Built-in limit safety guards protect API routing from abuse.
+- **Campaign Windows Compliance**: Automatically enforces strict Indian Standard Time (IST) calling hour gates to run campaigns only during configured slots.
+- **Timezone Safety**: Outbound calls verify lead-level local timezone dialing windows (8:00 AM – 9:00 PM local time) to prevent early/late night calls.
+- **Rate Limiting**: Built-in limit safety guards (1.5-second call intervals) protect API routing from abuse and respect Retell limits.
 

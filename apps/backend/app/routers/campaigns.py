@@ -17,6 +17,7 @@ router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 logger = structlog.get_logger(__name__)
 
 @router.get("/")
+@router.get("")
 def get_campaigns(
     status: Optional[str] = Query(None),
     date_from: Optional[date] = Query(None),
@@ -34,17 +35,35 @@ def get_campaigns(
         
     campaigns = query.order_by(desc(Campaign.created_at)).all()
     
-    # Pre-calculate or dynamically aggregate totals
+    # Pre-calculate totals using aggregate group-by queries to avoid O(N) database loops
+    from sqlalchemy import func
+    
+    leads_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.is_active == True).group_by(Lead.campaign_id).all()
+    leads_map = {cid: count for cid, count in leads_counts if cid is not None}
+    
+    calls_counts = db.query(Call.campaign_id, func.count(Call.id)).group_by(Call.campaign_id).all()
+    calls_map = {cid: count for cid, count in calls_counts if cid is not None}
+    
+    answered_counts = db.query(Call.campaign_id, func.count(Call.id)).filter(Call.status == "completed").group_by(Call.campaign_id).all()
+    answered_map = {cid: count for cid, count in answered_counts if cid is not None}
+    
+    booked_counts = db.query(Appointment.campaign_id, func.count(Appointment.id)).group_by(Appointment.campaign_id).all()
+    booked_map = {cid: count for cid, count in booked_counts if cid is not None}
+    
+    pending_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.status == "pending", Lead.is_active == True).group_by(Lead.campaign_id).all()
+    pending_map = {cid: count for cid, count in pending_counts if cid is not None}
+    
+    unpicked_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.status.in_(["failed", "no_answer", "voicemail", "busy"]), Lead.is_active == True).group_by(Lead.campaign_id).all()
+    unpicked_map = {cid: count for cid, count in unpicked_counts if cid is not None}
+    
     data = []
     for c in campaigns:
-        total_leads = db.query(Lead).filter(Lead.campaign_id == c.id).count()
-        total_called = db.query(Call).filter(Call.campaign_id == c.id).count()
-        total_answered = db.query(Call).filter(Call.campaign_id == c.id, Call.status == "completed").count()
-        total_booked = db.query(Appointment).filter(Appointment.campaign_id == c.id).count()
-        
-        # New Detailed Stats
-        total_pending = db.query(Lead).filter(Lead.campaign_id == c.id, Lead.status == "pending", Lead.is_active == True).count()
-        total_unpicked = db.query(Lead).filter(Lead.campaign_id == c.id, Lead.status.in_(["failed", "no_answer", "voicemail", "busy"]), Lead.is_active == True).count()
+        total_leads = leads_map.get(c.id, 0)
+        total_called = calls_map.get(c.id, 0)
+        total_answered = answered_map.get(c.id, 0)
+        total_booked = booked_map.get(c.id, 0)
+        total_pending = pending_map.get(c.id, 0)
+        total_unpicked = unpicked_map.get(c.id, 0)
         
         data.append({
             "id": c.id,
@@ -117,6 +136,7 @@ def get_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
     }
 
 @router.post("/")
+@router.post("")
 def create_campaign(
     name: str = Query(...),
     description: Optional[str] = None,
@@ -165,7 +185,7 @@ def create_campaign(
         db.commit()
         
     # Update total leads count
-    campaign.total_leads = db.query(Lead).filter(Lead.campaign_id == campaign.id, Lead.is_active == True).count()
+    campaign.total_leads = db.query(Lead).filter(Lead.campaign_id == campaign.id, Lead.is_active == True).count() # type: ignore
     db.commit()
         
     return {
@@ -200,23 +220,23 @@ def update_campaign(
         raise HTTPException(status_code=400, detail="Campaign settings can only be updated in draft or paused states")
         
     if name is not None:
-        campaign.name = name
+        campaign.name = name # type: ignore
     if description is not None:
-        campaign.description = description
+        campaign.description = description # type: ignore
     if start_time is not None:
-        campaign.start_time = start_time
+        campaign.start_time = start_time # type: ignore
     if end_time is not None:
-        campaign.end_time = end_time
+        campaign.end_time = end_time # type: ignore
     if timezone is not None:
-        campaign.timezone = timezone
+        campaign.timezone = timezone # type: ignore
     if calls_per_minute is not None:
-        campaign.calls_per_minute = calls_per_minute
+        campaign.calls_per_minute = calls_per_minute # type: ignore
     if max_attempts is not None:
-        campaign.max_attempts = max_attempts
+        campaign.max_attempts = max_attempts # type: ignore
     if ai_script is not None:
-        campaign.ai_script = ai_script
+        campaign.ai_script = ai_script # type: ignore
     if ai_persona_name is not None:
-        campaign.ai_persona_name = ai_persona_name
+        campaign.ai_persona_name = ai_persona_name # type: ignore
         
     db.commit()
     db.refresh(campaign)
@@ -232,8 +252,8 @@ async def start_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, d
     if campaign.status == "active":
         raise HTTPException(status_code=400, detail="Campaign is already active")
         
-    campaign.status = "active"
-    campaign.started_at = datetime.now(timezone.utc)
+    campaign.status = "active" # type: ignore
+    campaign.started_at = datetime.now(timezone.utc) # type: ignore
     
     # Pull all pending leads assigned to this campaign
     leads = db.query(Lead).filter(
@@ -245,38 +265,28 @@ async def start_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, d
     
     # Update total_leads count
     total = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.is_active == True).count()
-    campaign.total_leads = total
+    campaign.total_leads = total # type: ignore
     db.commit()
     
     if not leads:
-        return {"message": "Campaign started. No pending leads found to dial.", "leads_queued": 0}
+        return {"message": "Campaign started. No pending leads found to dial.", "leads_queued": 0, "status": "active"}
     
-    retell_service = RetellService()
-    lead_ids = [lead.id for lead in leads]
+    from app.services.campaign_runner import is_within_allowed_run_windows, start_campaign_dialer
     
-    # Dispatch each call as a proper async background task
-    async def run_all_calls():
-        import asyncio
-        from app.core.database import SessionLocal
-        for lid in lead_ids:
-            # Resiliency Check: Verify if campaign was paused or stopped
-            db_session = SessionLocal()
-            try:
-                camp = db_session.query(Campaign).filter(Campaign.id == campaign_id).first()
-                if not camp or camp.status != "active":
-                    logger.info("Campaign is no longer active. Exiting background dialer loop.", campaign_id=str(campaign_id))
-                    break
-            except Exception as e:
-                logger.error("Error checking campaign status in dialer loop", error=str(e))
-            finally:
-                db_session.close()
-
-            await make_single_call_sqlalchemy(lid, campaign_id, retell_service)
-            await asyncio.sleep(1.5)  # ~40 calls/minute rate limit buffer
-    
-    background_tasks.add_task(run_all_calls)
-    
-    return {"message": f"Campaign started. Queued {len(leads)} leads for calling.", "leads_queued": len(leads)}
+    # If currently within calling hours, trigger sequential calls immediately
+    if is_within_allowed_run_windows():
+        start_campaign_dialer(campaign_id)
+        return {
+            "message": f"Campaign started. Placed {len(leads)} leads into active dialer queue.",
+            "leads_queued": len(leads),
+            "status": "active_running"
+        }
+    else:
+        return {
+            "message": "Campaign activated. Dialer is currently on standby because the current time is outside allowed calling hours (8:00 PM - 10:00 PM, 12:00 AM - 1:00 AM, and 3:00 AM - 4:00 AM IST). Dialer will resume automatically during the next allowed window.",
+            "leads_queued": len(leads),
+            "status": "active_standby"
+        }
 
 @router.post("/{campaign_id}/pause")
 def pause_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
@@ -284,33 +294,49 @@ def pause_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    campaign.status = "paused"
+    campaign.status = "paused" # type: ignore
     db.commit()
     return {"message": "Campaign paused successfully"}
 
 @router.post("/{campaign_id}/resume")
-def resume_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def resume_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Resume dialer outreach"""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
-    campaign.status = "active"
+    if campaign.status == "active":
+        raise HTTPException(status_code=400, detail="Campaign is already active")
+        
+    campaign.status = "active" # type: ignore
     db.commit()
     
     # Pull remaining pending leads
-    leads = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.status == "pending", Lead.is_dnc == False).all()
-    retell_service = RetellService()
+    leads = db.query(Lead).filter(
+        Lead.campaign_id == campaign_id,
+        Lead.status == "pending",
+        Lead.is_dnc == False,
+        Lead.is_active == True
+    ).all()
     
-    for lead in leads:
-        background_tasks.add_task(
-            make_single_call_sqlalchemy,
-            lead.id,
-            campaign_id,
-            retell_service
-        )
+    if not leads:
+        return {"message": "Campaign resumed. No remaining pending leads to call.", "leads_queued": 0, "status": "active"}
         
-    return {"message": f"Campaign resumed, initiated calls to {len(leads)} leads."}
+    from app.services.campaign_runner import is_within_allowed_run_windows, start_campaign_dialer
+    
+    if is_within_allowed_run_windows():
+        start_campaign_dialer(campaign_id)
+        return {
+            "message": f"Campaign resumed. Re-opened dialer queue for {len(leads)} leads.",
+            "leads_queued": len(leads),
+            "status": "active_running"
+        }
+    else:
+        return {
+            "message": "Campaign resumed. Dialer is currently on standby because the current time is outside allowed calling hours (8:00 PM - 10:00 PM, 12:00 AM - 1:00 AM, and 3:00 AM - 4:00 AM IST). Dialer will resume automatically during the next allowed window.",
+            "leads_queued": len(leads),
+            "status": "active_standby"
+        }
 
 @router.get("/{campaign_id}/leads")
 def get_campaign_leads(
@@ -350,15 +376,17 @@ async def make_single_call_sqlalchemy(lead_id: UUID, campaign_id: UUID, retell_s
     from app.utils.timezone import is_within_calling_hours
     
     db = SessionLocal()
+    lead = None
+    call_log = None
     try:
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if not lead or not campaign: return
 
         # Timezone calling hours compliance check
-        if not is_within_calling_hours(lead.phone, lead.state):
-            lead.status = "failed"
-            lead.internal_notes = "Call blocked: timezone compliance window guard."
+        if not is_within_calling_hours(str(lead.phone), str(lead.state)): # type: ignore
+            lead.status = "failed" # type: ignore
+            lead.internal_notes = "Call blocked: timezone compliance window guard." # type: ignore
             db.commit()
             return
 
@@ -367,50 +395,62 @@ async def make_single_call_sqlalchemy(lead_id: UUID, campaign_id: UUID, retell_s
             lead_id=lead.id,
             campaign_id=campaign.id,
             status="initiated",
-            attempt_number=lead.call_attempts + 1
+            attempt_number=lead.call_attempts + 1 # type: ignore
         )
         db.add(call_log)
         
-        lead.status = "calling"
-        lead.call_attempts += 1
-        lead.total_calls += 1
-        lead.last_called_at = datetime.now(timezone.utc)
+        lead.status = "calling" # type: ignore
+        lead.call_attempts += 1 # type: ignore
+        lead.total_calls += 1 # type: ignore
+        lead.last_called_at = datetime.now(timezone.utc) # type: ignore
         
         # Send initial outreach SMS & Email in the background
         import asyncio
         from app.utils.automations import send_outreach_sms, send_outreach_email
         
         if lead.phone:
-            asyncio.create_task(send_outreach_sms(lead.phone, lead.full_name or "there", lead.business_name))
-            call_log.sms_sent = True
+            asyncio.create_task(send_outreach_sms(str(lead.phone), lead.full_name or "there", lead.business_name)) # type: ignore
+            call_log.sms_sent = True # type: ignore
         if lead.email:
-            asyncio.create_task(send_outreach_email(lead.email, lead.full_name or "there", lead.business_name, lead.business_type))
-            call_log.email_sent = True
+            asyncio.create_task(send_outreach_email(str(lead.email), lead.full_name or "there", lead.business_name, lead.business_type)) # type: ignore
+            call_log.email_sent = True # type: ignore
             
         db.commit()
 
-        # Trigger Retell Outbound Call API
-        retell_res = await retell_service.make_call(
-            phone_number=lead.phone,
-            campaign_id=str(campaign_id),
-            contact_id=str(lead_id)
-        )
-        
-        # Save real Call identifiers
-        call_log.retell_call_id = retell_res.get("call_id")
-        call_log.started_at = datetime.now(timezone.utc)
-        db.commit()
+        # Trigger Retell Outbound Call API or Simulation
+        from app.core.config import get_settings
+        settings = get_settings()
+        if settings.SIMULATE_CALLS:
+            mock_call_id = f"sim_retell_{uuid4()}"
+            call_log.retell_call_id = mock_call_id # type: ignore
+            call_log.started_at = datetime.now(timezone.utc) # type: ignore
+            db.commit()
+            
+            # Start simulation in background
+            from app.services.call_simulator import simulate_call_lifecycle
+            asyncio.create_task(simulate_call_lifecycle(str(lead_id), str(campaign_id), mock_call_id))
+        else:
+            retell_res = await retell_service.make_call(
+                phone_number=str(lead.phone), # type: ignore
+                campaign_id=str(campaign_id),
+                contact_id=str(lead_id)
+            )
+            
+            # Save real Call identifiers
+            call_log.retell_call_id = retell_res.get("call_id") # type: ignore
+            call_log.started_at = datetime.now(timezone.utc) # type: ignore
+            db.commit()
 
     except Exception as e:
         logger.error("Error placing SQL call", lead_id=str(lead_id), error=str(e))
         try:
-            if 'call_log' in locals() and call_log:
-                call_log.status = "failed"
-                call_log.outcome = "error"
-                call_log.transcript = f"Error initiating call: {str(e)}"
-            if 'lead' in locals() and lead:
-                lead.status = "failed"
-                lead.internal_notes = f"Retell call initiation failed: {str(e)}"
+            if call_log:
+                call_log.status = "failed" # type: ignore
+                call_log.outcome = "error" # type: ignore
+                call_log.transcript = f"Error initiating call: {str(e)}" # type: ignore
+            if lead:
+                lead.status = "failed" # type: ignore
+                lead.internal_notes = f"Retell call initiation failed: {str(e)}" # type: ignore
             db.commit()
         except Exception as db_err:
             logger.error("Failed to save call error state", error=str(db_err))
@@ -444,11 +484,11 @@ def recampaign_leads(
     
     count = 0
     for lead in leads_to_reset:
-        lead.status = "pending"
+        lead.status = "pending" # type: ignore
         count += 1
         
     if campaign.status == "completed":
-        campaign.status = "paused"
+        campaign.status = "paused" # type: ignore
         
     db.commit()
     

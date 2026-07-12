@@ -27,45 +27,58 @@ except ImportError:
     logger.warning("twilio SDK not available. SMS sending will be mocked.")
 
 
+import asyncio
+
+SMTP_LOCK: Optional[asyncio.Lock] = None
+
 async def send_smtp_email_direct(to_email: str, subject: str, html_content: str) -> bool:
     """Send standard email via secure SMTP client connection"""
+    global SMTP_LOCK
+    if SMTP_LOCK is None:
+        SMTP_LOCK = asyncio.Lock()
+
     settings = get_settings()
     host = settings.SMTP_HOST
     port = settings.SMTP_PORT
     user = settings.SMTP_USER
     password = settings.SMTP_PASSWORD
-    sender = settings.SENDER_EMAIL or user
+    sender = settings.SENDER_EMAIL or user or ""
     sender_name = settings.SENDER_NAME or "Reach Magnets"
 
-    logger.info("Triggering SMTP email direct dispatch", to=to_email, host=host, port=port)
+    logger.info("Triggering SMTP email direct dispatch (waiting for queue lock)", to=to_email, host=host, port=port)
 
     if not user or not password:
         logger.warning("SMTP user or password not configured. Mocking SMTP email delivery.")
         logger.info(f"Mock SMTP Email payload:\nTo: {to_email}\nSubject: {subject}\nBody preview: {html_content[:200]}...")
         return True
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{sender_name} <{sender}>"
-        msg["To"] = to_email
+    async with SMTP_LOCK:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"{sender_name} <{sender}>"
+            msg["To"] = to_email
 
-        msg.attach(MIMEText(html_content, "html"))
+            msg.attach(MIMEText(html_content, "html"))
 
-        import asyncio
-        def sync_send():
-            with smtplib.SMTP(host, port, timeout=10) as server:
-                server.starttls()
-                server.login(user, password)
-                server.sendmail(sender, to_email, msg.as_string())
+            def sync_send():
+                with smtplib.SMTP(host, port, timeout=10) as server:
+                    server.starttls()
+                    server.login(user, password)
+                    server.sendmail(sender, to_email, msg.as_string())
 
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, sync_send)
-        logger.info("SMTP email dispatched successfully", to=to_email)
-        return True
-    except Exception as e:
-        logger.error("Failed to send email via SMTP", error=str(e))
-        return False
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, sync_send)
+            logger.info("SMTP email dispatched successfully", to=to_email)
+            # Stagger emails by 45 seconds to prevent Gmail anti-bot suspension
+            logger.info("Enforcing 45-second stagger delay before next SMTP dispatch...")
+            await asyncio.sleep(45)
+            return True
+        except Exception as e:
+            logger.error("Failed to send email via SMTP", error=str(e))
+            # Minimal cool down sleep after error
+            await asyncio.sleep(5)
+            return False
 
 
 async def send_appointment_email(to_email: str, to_name: str, appointment_details: str) -> bool:
@@ -138,7 +151,7 @@ async def send_appointment_email(to_email: str, to_name: str, appointment_detail
         )
 
         api_response = api_instance.send_transac_email(send_smtp_email)
-        logger.info("Brevo email sent successfully", message_id=api_response.message_id)
+        logger.info("Brevo email sent successfully", message_id=getattr(api_response, "message_id", "unknown"))
         return True
     except ApiException as e:
         logger.error("Exception when calling TransactionalEmailsApi->send_transac_email", error=str(e))
@@ -241,8 +254,11 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
     Returns (subject, html_content).
     """
     settings = get_settings()
-    event_type_id = settings.CALCOM_EVENT_TYPE_ID or "5752986"
-    booking_url = f"https://cal.com/reachmagnets/{event_type_id}"
+    gmeet_link = getattr(settings, "GMEET_LINK", None)
+    if gmeet_link and gmeet_link.strip():
+        booking_url = gmeet_link
+    else:
+        booking_url = "https://meet.google.com"
     
     biz_name_str = business_name.strip() if business_name else ""
     
@@ -459,7 +475,7 @@ async def send_outreach_email(to_email: str, to_name: str, business_name: Option
         )
 
         api_response = api_instance.send_transac_email(send_smtp_email)
-        logger.info("Brevo outreach email sent successfully", message_id=api_response.message_id)
+        logger.info("Brevo outreach email sent successfully", message_id=getattr(api_response, "message_id", "unknown"))
         return True
     except ApiException as e:
         logger.error("Exception when calling TransactionalEmailsApi->send_transac_email for outreach", error=str(e))
@@ -486,7 +502,7 @@ async def send_outreach_sms(to_phone: str, to_name: str, business_name: Optional
         client = TwilioClient(account_sid, auth_token)
         biz_str = f" for {business_name}" if business_name else ""
         message_body = (
-            f"Hi {to_name}! This is Sarah from Reach Magnets. "
+            f"Hi {to_name}! This is Ojas from Reach Magnets. "
             f"We help businesses{biz_str} get more customers online using SEO, Ads, and custom websites. "
             f"I'm giving you a quick call right now to offer a free 15-min digital marketing audit. Hope to speak soon!"
         )
@@ -501,4 +517,60 @@ async def send_outreach_sms(to_phone: str, to_name: str, business_name: Optional
     except Exception as e:
         logger.error("Error sending Twilio outreach SMS", error=str(e))
         return False
+
+
+async def send_twice_daily_sms_followups() -> bool:
+    """Find all active interested leads, send them a follow-up SMS with calendar link, limit to max 2 times"""
+    from app.core.database import SessionLocal
+    from app.models.lead import Lead
+    from app.services import sms_service
+    from app.core.config import get_settings
+    from datetime import datetime
+    
+    settings = get_settings()
+    db = SessionLocal()
+    try:
+        # Get active leads that are interested
+        interested_leads = db.query(Lead).filter(
+            Lead.status == "interested",
+            Lead.is_active == True,
+            Lead.phone != None
+        ).all()
+        
+        logger.info(f"Found {len(interested_leads)} interested leads for follow-up")
+        
+        for lead in interested_leads:
+            # Prevent spamming: count how many system follow-ups have been sent
+            notes = lead.internal_notes or ""
+            follow_ups_sent = notes.count("[System] Follow-up SMS sent")
+            
+            if follow_ups_sent >= 2:
+                logger.info(f"Lead {lead.id} already received 2 follow-ups. Skipping.")
+                continue
+                
+            # Draft and send SMS
+            booking_url = settings.GMEET_LINK or "https://calendar.app.google/Mhyrvq12opzVHV3g6"
+            message_body = (
+                f"Hi {lead.full_name or 'there'}, this is Ojas from Reach Magnets. "
+                f"Just wanted to follow up and share the link to schedule your free 15-minute digital growth audit: "
+                f"{booking_url}. Select a time that works best for you!"
+            )
+            
+            logger.info(f"Sending follow-up SMS to {lead.full_name} ({lead.phone})")
+            success = await sms_service.send(str(lead.phone), message_body)
+            
+            if success:
+                # Update notes to record follow-up
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                notes_addon = f"\n[{timestamp}] [System] Follow-up SMS sent."
+                lead.internal_notes = notes + notes_addon  # type: ignore
+                db.commit()
+                
+        return True
+    except Exception as e:
+        logger.error("Error running twice daily SMS followups", error=str(e))
+        return False
+    finally:
+        db.close()
+
 

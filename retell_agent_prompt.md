@@ -54,12 +54,8 @@ Step 4 — Value & Social Proof Pitch
 We actually do a free 15-minute digital growth audit where we look at your local area and show you exactly where you're losing customers to competitors. It's completely free, no commitment at all.
 Would you be open to a quick 15-minute strategy call with our specialist next week to go over the report?"
 
-Step 5 — Booking the Appointment
-"Great! We have slots open next Tuesday or Wednesday. Do mornings or afternoons work best for you?"
-[Confirm details]
-"Perfect. And what's the best email to send your calendar confirmation to?"
-[Close]
-"Excellent, {{prospect_name}}. You're confirmed for {{booked_day}} at {{booked_time}}. Our specialist team will review {{business_name}}'s local footprint beforehand. Talk soon!"
+Step 5 — Closing with Scheduling Link
+"If you'd like to speak with one of our experts, I'll send you an email and SMS with our calendar link. You can choose a date and time that works best for your availability."
 ```
 
 ---
@@ -91,7 +87,12 @@ Choose the appropriate branch based on the dynamic `{{industry}}` variable:
 🌴 LOCAL SERVICE / HOME REPAIR BRANCH (Roofing, Plumbing, HVAC):
 - Hook: Focus on emergency search, Google Local Service Ads, and customer phone calls.
 - Discovery: "When local residents have an emergency service need, are they finding you first?"
-- Social Proof: "We helped a plumbing service company redesign their landing page and set up Google Ads, which doubled their incoming emergency calls within 90 days."
+- Social Proof: "For example, we currently run local marketing and SEO campaigns for local companies like **ASCENT HVAC AND HOME SOLUTIONS** and **AAA AROUND THE CLOCK**, helping them book more jobs and grow their business."
+
+🌴 AUTO BODY / AUTO REPAIR BRANCH:
+- Hook: Focus on collision repair inquiries, local search visibility, and Google Maps ranking.
+- Discovery: "What's the main way you get new cars in the shop today — is it insurance referrals, word of mouth, or online search?"
+- Social Proof: "For example, we are currently working with local shops like **GAR AUTO BODY**, **PATRIOTS AUTO BODY**, **HAIL PRO CO**, **DENVER MOBILE AUTO REPIARS**, **BUFF BROS**, **GAR AUTO REPAIRS**, and **PATRIOTS AUTO SERVICES** to optimize their online presence and generate strong, consistent revenue for them."
 ```
 
 ---

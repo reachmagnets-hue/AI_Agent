@@ -13,6 +13,7 @@ from app.models.lead import Lead
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 @router.get("/")
+@router.get("")
 def get_appointments(
     meeting_date: Optional[date] = Query(None),
     date_from: Optional[date] = Query(None),
@@ -153,13 +154,13 @@ def update_appointment(
         raise HTTPException(status_code=404, detail="Appointment not found")
 
     if status is not None:
-        appt.status = status
+        setattr(appt, "status", status)
     if rm_notes is not None:
-        appt.rm_notes = rm_notes
+        setattr(appt, "rm_notes", rm_notes)
     if assigned_to is not None:
-        appt.assigned_to = assigned_to
+        setattr(appt, "assigned_to", assigned_to)
     if reminder_sent is not None:
-        appt.reminder_sent = reminder_sent
+        setattr(appt, "reminder_sent", reminder_sent)
 
     db.commit()
     db.refresh(appt)

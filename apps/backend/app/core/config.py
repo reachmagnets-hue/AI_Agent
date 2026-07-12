@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
+    BYPASS_TIME_GATING: bool = False
     
     # IMAP Config
     IMAP_SERVER: Optional[str] = None
@@ -78,6 +79,7 @@ class Settings(BaseSettings):
     # Environment Configuration
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
+    SIMULATE_CALLS: bool = True
 
     # Logging Configuration
     LOG_LEVEL: str = "INFO"

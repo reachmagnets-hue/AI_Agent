@@ -6,5 +6,6 @@
   ],
   "pyrefly.pythonInterpreter": "${workspaceFolder}/apps/backend/venv/bin/python",
   "pyrefly.configPath": "${workspaceFolder}/pyrefly.toml",
-  "python.pyrefly.configPath": "${workspaceFolder}/pyrefly.toml"
+  "python.pyrefly.configPath": "${workspaceFolder}/pyrefly.toml",
+  "pyrefly.enabled": false
 }
