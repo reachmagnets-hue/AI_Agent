@@ -120,12 +120,66 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
             finally:
                 db.close()
                 
-            # Place outbound call
-            logger.info("Placing outbound call for lead", campaign_id=str(campaign_id), lead_id=str(lead_id))
-            await make_single_call_sqlalchemy(lead_id, campaign_id, retell_service)
-            
-            # Rate limit cooldown (1.5 seconds)
-            await asyncio.sleep(1.5)
+            # Check if this is an email-only campaign based on campaign name
+            is_email_only = False
+            db_check = SessionLocal()
+            try:
+                camp_check = db_check.query(Campaign).filter(Campaign.id == campaign_id).first()
+                if camp_check and camp_check.name:
+                    name_lower = camp_check.name.lower()
+                    if "email" in name_lower or "e mail" in name_lower:
+                        is_email_only = True
+            except Exception as check_err:
+                logger.error("Error checking campaign type", error=str(check_err))
+            finally:
+                db_check.close()
+
+            if is_email_only:
+                logger.info("Processing email-only campaign lead", campaign_id=str(campaign_id), lead_id=str(lead_id))
+                db_update = SessionLocal()
+                try:
+                    db_item = db_update.query(Lead).filter(Lead.id == lead_id).first()
+                    if db_item:
+                        if db_item.email:
+                            from app.utils.automations import send_outreach_email
+                            # Update lead status to calling/sending to prevent double execution
+                            db_item.status = "calling"
+                            db_update.commit()
+                            
+                            # Send email
+                            success = await send_outreach_email(
+                                to_email=str(db_item.email),
+                                to_name=db_item.full_name or "there",
+                                business_name=db_item.business_name,
+                                business_type=db_item.business_type,
+                                lead_id=str(db_item.id)
+                            )
+                            
+                            # Re-fetch item to update status
+                            db_item = db_update.query(Lead).filter(Lead.id == lead_id).first()
+                            if db_item:
+                                db_item.status = "called" if success else "failed"
+                                db_update.commit()
+                            logger.info("Email outreach complete for lead", lead_id=str(lead_id), success=success)
+                        else:
+                            db_item.status = "failed"
+                            db_item.internal_notes = "Skipped: Lead has no email address."
+                            db_update.commit()
+                            logger.warning("Lead skipped: no email", lead_id=str(lead_id))
+                except Exception as update_err:
+                    logger.error("Error processing email campaign lead", lead_id=str(lead_id), error=str(update_err))
+                finally:
+                    db_update.close()
+                
+                # Small delay to keep event loop alive and stagger sends
+                await asyncio.sleep(1.0)
+            else:
+                # Place outbound call
+                logger.info("Placing outbound call for lead", campaign_id=str(campaign_id), lead_id=str(lead_id))
+                await make_single_call_sqlalchemy(lead_id, campaign_id, retell_service)
+                
+                # Rate limit cooldown (1.5 seconds)
+                await asyncio.sleep(1.5)
             
     except Exception as e:
         logger.error("Error in campaign dialer loop executor", campaign_id=str(campaign_id), error=str(e))
