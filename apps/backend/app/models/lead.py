@@ -68,6 +68,13 @@ class Lead(Base):
     # Email Outreach fields
     email_message = Column(Text, nullable=True)
     email_sent_at = Column(DateTime, nullable=True)
+    email_msg_id = Column(String(200), nullable=True, index=True)
+    email_status = Column(String(50), nullable=True, index=True) # sent, delivered, opened, clicked, bounced, blocked
+    email_delivered_at = Column(DateTime, nullable=True)
+    email_opened_at = Column(DateTime, nullable=True)
+    email_clicked_at = Column(DateTime, nullable=True)
+    email_bounced_at = Column(DateTime, nullable=True)
+    email_blocked_at = Column(DateTime, nullable=True)
     
     # Flags
     # Do Not Call

@@ -175,9 +175,32 @@ export default function LeadDetailPage() {
                   <span className="font-mono text-foreground font-semibold">{lead.phone}</span>
                 </div>
                 {lead.email && (
-                  <div className="flex items-center gap-2.5 text-muted-foreground">
-                    <Mail className="h-4 w-4 text-primary" />
-                    <span className="text-foreground break-all">{lead.email}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5 text-muted-foreground">
+                      <Mail className="h-4 w-4 text-primary" />
+                      <span className="text-foreground break-all">{lead.email}</span>
+                    </div>
+                    {lead.email_status && (
+                      <div className="pl-6 text-[11px] space-y-0.5 mt-1">
+                        <div>
+                          <span className="font-semibold text-slate-500">Email Status: </span>
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] uppercase border font-bold ${
+                            lead.email_status === 'opened' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' : 
+                            lead.email_status === 'clicked' ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                            lead.email_status === 'delivered' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                            lead.email_status === 'sent' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                            lead.email_status === 'bounced' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                            'bg-red-500/10 text-red-500 border-red-500/20'
+                          }`}>{lead.email_status}</span>
+                        </div>
+                        {lead.email_sent_at && <div><span className="text-slate-400">Sent: </span><span className="text-muted-foreground font-mono">{new Date(lead.email_sent_at).toLocaleString()}</span></div>}
+                        {lead.email_delivered_at && <div><span className="text-slate-400">Delivered: </span><span className="text-muted-foreground font-mono">{new Date(lead.email_delivered_at).toLocaleString()}</span></div>}
+                        {lead.email_opened_at && <div><span className="text-slate-400">Opened: </span><span className="text-muted-foreground font-mono">{new Date(lead.email_opened_at).toLocaleString()}</span></div>}
+                        {lead.email_clicked_at && <div><span className="text-slate-400">Clicked: </span><span className="text-muted-foreground font-mono">{new Date(lead.email_clicked_at).toLocaleString()}</span></div>}
+                        {lead.email_bounced_at && <div><span className="text-slate-400">Bounced: </span><span className="text-muted-foreground font-mono">{new Date(lead.email_bounced_at).toLocaleString()}</span></div>}
+                        {lead.email_blocked_at && <div><span className="text-slate-400">Blocked: </span><span className="text-muted-foreground font-mono">{new Date(lead.email_blocked_at).toLocaleString()}</span></div>}
+                      </div>
+                    )}
                   </div>
                 )}
                 {lead.website && (

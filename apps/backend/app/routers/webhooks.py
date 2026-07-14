@@ -440,6 +440,58 @@ async def increment_campaign_stats_db(db: Session, campaign_id: UUID, status_typ
             campaign.total_booked += 1
         db.commit()
 
+from typing import Union, List
+
+@router.post("/brevo")
+async def handle_brevo_webhook(payload: Union[Dict[str, Any], List[Dict[str, Any]]], db: Session = Depends(get_db)):
+    """
+    Handle webhook events from Brevo for email status tracking (delivered, opened, clicked, bounced, blocked)
+    """
+    events = payload if isinstance(payload, list) else [payload]
+    results = []
+    
+    for event_data in events:
+        event = event_data.get("event")
+        email = event_data.get("email")
+        msg_id = event_data.get("message-id") or event_data.get("message_id")
+        
+        if not msg_id:
+            continue
+            
+        # Search for lead by email_msg_id
+        lead = db.query(Lead).filter(Lead.email_msg_id == msg_id).first()
+        if not lead and email:
+            # Fallback to email search
+            lead = db.query(Lead).filter(Lead.email == email, Lead.is_active == True).order_by(Lead.updated_at.desc()).first()
+            
+        if lead:
+            now_utc = datetime.utcnow()
+            if event in ["request", "sent"]:
+                lead.email_status = "sent"
+            elif event == "delivered":
+                lead.email_status = "delivered"
+                lead.email_delivered_at = now_utc
+            elif event in ["opened", "unique_opened"]:
+                lead.email_status = "opened"
+                if not lead.email_opened_at:
+                    lead.email_opened_at = now_utc
+            elif event == "click":
+                lead.email_status = "clicked"
+                if not lead.email_clicked_at:
+                    lead.email_clicked_at = now_utc
+            elif event in ["bounces", "bounce", "hardBounce", "softBounce"]:
+                lead.email_status = "bounced"
+                lead.email_bounced_at = now_utc
+            elif event in ["blocked", "spam", "unsubscribed"]:
+                lead.email_status = "blocked"
+                lead.email_blocked_at = now_utc
+                
+            lead.updated_at = now_utc
+            db.commit()
+            results.append({"lead_id": str(lead.id), "status": lead.email_status})
+            
+    return {"status": "success", "updates": results}
+
 @router.post("/health")
 async def webhook_health():
     return {"status": "healthy", "service": "webhooks"}

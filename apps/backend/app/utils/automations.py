@@ -31,7 +31,7 @@ import asyncio
 
 SMTP_LOCK: Optional[asyncio.Lock] = None
 
-async def send_smtp_email_direct(to_email: str, subject: str, html_content: str) -> bool:
+async def send_smtp_email_direct(to_email: str, subject: str, html_content: str, lead_id: Optional[str] = None) -> bool:
     """Send standard email via secure SMTP client connection"""
     global SMTP_LOCK
     if SMTP_LOCK is None:
@@ -52,12 +52,18 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str)
         logger.info(f"Mock SMTP Email payload:\nTo: {to_email}\nSubject: {subject}\nBody preview: {html_content[:200]}...")
         return True
 
+    # Generate custom Message-ID
+    import uuid
+    from datetime import datetime, timezone
+    msg_id = f"<{uuid.uuid4()}@reachmagnets.com>"
+
     async with SMTP_LOCK:
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = f"{sender_name} <{sender}>"
             msg["To"] = to_email
+            msg["Message-ID"] = msg_id
 
             msg.attach(MIMEText(html_content, "html"))
 
@@ -69,7 +75,24 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str)
 
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, sync_send)
-            logger.info("SMTP email dispatched successfully", to=to_email)
+            logger.info("SMTP email dispatched successfully", to=to_email, message_id=msg_id)
+
+            if lead_id:
+                from app.core.database import SessionLocal
+                from app.models.lead import Lead
+                db = SessionLocal()
+                try:
+                    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+                    if lead:
+                        lead.email_msg_id = msg_id
+                        lead.email_status = "sent"
+                        lead.email_sent_at = datetime.now(timezone.utc)
+                        db.commit()
+                except Exception as db_err:
+                    logger.error("Failed to update lead message ID in database", error=str(db_err))
+                finally:
+                    db.close()
+
             # Stagger emails by 45 seconds to prevent Gmail anti-bot suspension
             logger.info("Enforcing 45-second stagger delay before next SMTP dispatch...")
             await asyncio.sleep(45)
@@ -360,7 +383,7 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
     return subject, full_html
 
 
-async def send_outreach_email(to_email: str, to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None) -> bool:
+async def send_outreach_email(to_email: str, to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None, lead_id: Optional[str] = None) -> bool:
     """Send initial approach/outreach email introducing services via chosen Email Provider (Brevo or SMTP)"""
     settings = get_settings()
     sender_email = settings.SENDER_EMAIL
@@ -369,7 +392,7 @@ async def send_outreach_email(to_email: str, to_name: str, business_name: Option
     subject, html_content = render_outreach_email(to_name, business_name, business_type)
 
     if settings.EMAIL_PROVIDER == "smtp":
-        return await send_smtp_email_direct(to_email, subject, html_content)
+        return await send_smtp_email_direct(to_email, subject, html_content, lead_id=lead_id)
 
     api_key = settings.BREVO_API_KEY
     logger.info("Triggering Brevo outreach email", to_email=to_email, to_name=to_name)
@@ -395,7 +418,26 @@ async def send_outreach_email(to_email: str, to_name: str, business_name: Option
         )
 
         api_response = api_instance.send_transac_email(send_smtp_email)
-        logger.info("Brevo outreach email sent successfully", message_id=getattr(api_response, "message_id", "unknown"))
+        msg_id = getattr(api_response, "message_id", "unknown")
+        logger.info("Brevo outreach email sent successfully", message_id=msg_id)
+
+        if lead_id and msg_id != "unknown":
+            from app.core.database import SessionLocal
+            from app.models.lead import Lead
+            from datetime import datetime, timezone
+            db = SessionLocal()
+            try:
+                lead = db.query(Lead).filter(Lead.id == lead_id).first()
+                if lead:
+                    lead.email_msg_id = msg_id
+                    lead.email_status = "sent"
+                    lead.email_sent_at = datetime.now(timezone.utc)
+                    db.commit()
+            except Exception as db_err:
+                logger.error("Failed to update lead message ID from Brevo API", error=str(db_err))
+            finally:
+                db.close()
+
         return True
     except ApiException as e:
         logger.error("Exception when calling TransactionalEmailsApi->send_transac_email for outreach", error=str(e))

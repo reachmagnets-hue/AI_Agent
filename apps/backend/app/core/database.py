@@ -48,6 +48,27 @@ def create_tables():
         import app.models  # Ensure models are registered
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
+        
+        # Check and apply migrations on SQLite / PostgreSQL for leads email tracking
+        from sqlalchemy import inspect, text
+        inspector = inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("leads")]
+        
+        new_cols = {
+            "email_msg_id": "VARCHAR(200)",
+            "email_status": "VARCHAR(50)",
+            "email_delivered_at": "DATETIME",
+            "email_opened_at": "DATETIME",
+            "email_clicked_at": "DATETIME",
+            "email_bounced_at": "DATETIME",
+            "email_blocked_at": "DATETIME"
+        }
+        
+        with engine.begin() as conn:
+            for col_name, col_type in new_cols.items():
+                if col_name not in columns:
+                    conn.execute(text(f"ALTER TABLE leads ADD COLUMN {col_name} {col_type}"))
+                    logger.info(f"Added column {col_name} to leads table successfully")
     except Exception as e:
         logger.error(f"Failed to create database tables: {str(e)}", exc_info=True)
 

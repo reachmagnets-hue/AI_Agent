@@ -242,6 +242,19 @@ def get_lead(lead_id: UUID, db: Session = Depends(get_db)):
         "detail": f"Imported at {lead.imported_at.strftime('%Y-%m-%d %H:%M:%S')}"
     })
     
+    if lead.email_sent_at:
+        timeline.append({
+            "type": "email",
+            "title": f"Outreach Email to {lead.email or 'N/A'}",
+            "time": lead.email_sent_at,
+            "detail": f"Status: {lead.email_status or 'sent'} | "
+                      f"Delivered: {lead.email_delivered_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_delivered_at else 'No'} | "
+                      f"Opened: {lead.email_opened_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_opened_at else 'No'} | "
+                      f"Clicked: {lead.email_clicked_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_clicked_at else 'No'} | "
+                      f"Bounced: {lead.email_bounced_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_bounced_at else 'No'} | "
+                      f"Blocked: {lead.email_blocked_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_blocked_at else 'No'}"
+        })
+    
     for call in calls:
         timeline.append({
             "type": "call",

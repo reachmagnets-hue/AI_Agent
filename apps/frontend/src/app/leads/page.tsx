@@ -599,6 +599,7 @@ export default function LeadsPage() {
                     <TableHead>Website</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Email Status</TableHead>
                     <TableHead>LinkedIn</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>LI Status</TableHead>
@@ -642,6 +643,24 @@ export default function LeadsPage() {
                           </a>
                         ) : (
                           <span className="text-muted-foreground italic text-xs">No Email</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {lead.email_status ? (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap ${
+                            lead.email_status === 'opened' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' : 
+                            lead.email_status === 'clicked' ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                            lead.email_status === 'delivered' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                            lead.email_status === 'sent' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                            lead.email_status === 'bounced' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                            'bg-red-500/10 text-red-500 border-red-500/20'
+                          }`}>
+                            {lead.email_status}
+                          </span>
+                        ) : lead.email ? (
+                          <span className="text-muted-foreground text-xs italic">Not Sent</span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">--</span>
                         )}
                       </TableCell>
                       <TableCell>

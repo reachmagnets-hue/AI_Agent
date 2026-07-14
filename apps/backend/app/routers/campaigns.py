@@ -412,7 +412,7 @@ async def make_single_call_sqlalchemy(lead_id: UUID, campaign_id: UUID, retell_s
             asyncio.create_task(send_outreach_sms(str(lead.phone), lead.full_name or "there", lead.business_name)) # type: ignore
             call_log.sms_sent = True # type: ignore
         if lead.email:
-            asyncio.create_task(send_outreach_email(str(lead.email), lead.full_name or "there", lead.business_name, lead.business_type)) # type: ignore
+            asyncio.create_task(send_outreach_email(str(lead.email), lead.full_name or "there", lead.business_name, lead.business_type, lead_id=str(lead.id))) # type: ignore
             call_log.email_sent = True # type: ignore
             
         db.commit()
