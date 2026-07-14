@@ -299,8 +299,7 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
         
         <p style="margin-bottom: 0; font-size: 15px; color: #222222; font-family: sans-serif;">
             Best regards,<br>
-            <strong>Chetan Patil</strong><br>
-            Reach Magnets Team<br>
+            <strong>Reach Magnets Team</strong><br>
             <a href="https://reachmagnets.com" style="color: #1a73e8;">https://reachmagnets.com</a>
         </p>
         """
@@ -334,8 +333,7 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
         
         <p style="margin-bottom: 0; font-size: 15px; color: #222222; font-family: sans-serif;">
             Best regards,<br>
-            <strong>Chetan Patil</strong><br>
-            Reach Magnets Team<br>
+            <strong>Reach Magnets Team</strong><br>
             <a href="https://reachmagnets.com" style="color: #1a73e8;">https://reachmagnets.com</a>
         </p>
         """
