@@ -549,7 +549,7 @@ async def send_twice_daily_sms_followups() -> bool:
                 continue
                 
             # Draft and send SMS
-            booking_url = settings.GMEET_LINK or "https://calendar.app.google/Mhyrvq12opzVHV3g6"
+            booking_url = settings.GMEET_LINK or "https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ35QI8Gc4MbVP5DQSfV6bJ7xeH746aG8NnJyxNR95p07BHpHKMY6guW7V5fgZRsIZCDGaaHQawv"
             message_body = (
                 f"Hi {lead.full_name or 'there'}, this is Ojas from Reach Magnets. "
                 f"Just wanted to follow up and share the link to schedule your free 15-minute digital growth audit: "

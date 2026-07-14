@@ -397,7 +397,7 @@ async def handle_post_call_actions(
         print("Skipping post call actions: No phone number available.")
         return
 
-    booking_url = settings.GMEET_LINK or "https://calendar.app.google/Mhyrvq12opzVHV3g6"
+    booking_url = settings.GMEET_LINK or "https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ35QI8Gc4MbVP5DQSfV6bJ7xeH746aG8NnJyxNR95p07BHpHKMY6guW7V5fgZRsIZCDGaaHQawv"
 
     if outcome in ["meeting_booked", "interested_callback"]:
         # 1. Send SMS/WhatsApp Booking Link
