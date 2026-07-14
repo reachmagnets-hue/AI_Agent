@@ -258,7 +258,7 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
     if gmeet_link and gmeet_link.strip():
         booking_url = gmeet_link
     else:
-        booking_url = "https://meet.google.com"
+        booking_url = "https://calendar.google.com"
     
     biz_name_str = business_name.strip() if business_name else ""
     
@@ -275,107 +275,69 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
         business_phrase = biz_name_str if biz_name_str else "your business"
         
         body_content = f"""
-        <p style="margin-top: 0; margin-bottom: 16px;">Hi {to_name},</p>
+        <p style="margin-top: 0; margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Hi {to_name},</p>
         
-        <p style="margin-bottom: 16px;">Most auto shops and dealerships are losing valuable service bookings and sales every single day—not because their service isn't great, but because of small, fixable gaps in their online visibility.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">I was recently reviewing local search visibility for {business_phrase} and wanted to reach out regarding a few fixable gaps that might be costing you service bookings and customer visits.</p>
         
-        <p style="margin-bottom: 16px;">We often see: a slow-loading mobile site (crucial when drivers are stranded or looking for quick service), low visibility on local maps (missing queries like "car repair near me"), or missing out entirely when potential customers search on ChatGPT/Gemini for "best mechanic near me" (Generative Engine Optimization/GEO).</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Many auto shops and dealerships miss out on customers because of simple things: slow mobile page speeds, low local map search rankings, or lack of recommendations from smart AI assistants (Generative Engine Optimization).</p>
         
-        <p style="margin-bottom: 16px;">The tricky part? Most shop owners are too busy keeping cars on the road to even notice these gaps exist.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We would love to put together a completely free, no-pressure digital marketing audit for you. Here is what we'll review:</p>
         
-        <p style="margin-bottom: 16px;">At <strong>Reach Magnets</strong>, we've helped over 1,000 local businesses generate 2 million+ leads through strategic local SEO, AEO/GEO optimization, high-converting websites, and performance marketing—often increasing bookings and site traffic by 20%+ within months.</p>
+        <ul style="margin-bottom: 18px; padding-left: 20px; font-size: 15px; color: #222222; font-family: sans-serif; line-height: 1.5;">
+            <li><strong>Local Map Rankings:</strong> Where you rank when customers search for direct repair and service keywords.</li>
+            <li><strong>AI Search Visibility:</strong> What tools like ChatGPT and Gemini recommend when drivers ask for local auto service.</li>
+            <li><strong>Actionable Fixes:</strong> Specific improvements to optimize your site speed and prevent booking drops.</li>
+        </ul>
         
-        <p style="margin-bottom: 16px;">We would love to offer {business_phrase} a completely free, no-pressure digital marketing audit. Here is what you'll get:</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">It only takes about 15 minutes to go over this together. You can pick a convenient time on my calendar here:</p>
         
-        <table border="0" cellpadding="0" cellspacing="0" style="margin: 20px 0; padding-left: 10px;">
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>Local Map Ranking Check:</strong> How you rank in search results for direct repair and service keywords.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>AI Visibility (GEO/AEO) Assessment:</strong> What smart assistants recommend when drivers ask for auto service options in your city.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>Actionable Fixes:</strong> Specific speed and user experience improvements for your website to prevent booking abandonment.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>Competitor Insights:</strong> A quick look at what other local shops are doing to capture leads.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 0; font-size: 14.5px; color: #4b5563;"><strong>Growth Roadmap:</strong> A step-by-step plan to scale your local reach, leads, and service revenue.</td>
-            </tr>
-        </table>
+        <p style="margin-bottom: 24px; font-size: 15px; font-family: sans-serif;">
+            <a href="{booking_url}" style="color: #1a73e8; text-decoration: underline; font-weight: bold;">{booking_url}</a>
+        </p>
         
-        <p style="margin-bottom: 24px;">It takes only about 30 minutes, but it could easily save you months of slow bookings and thousands in trial-and-error marketing spend.</p>
+        <p style="margin-bottom: 20px; font-size: 15px; color: #222222; font-family: sans-serif;">Looking forward to helping you uncover new visibility opportunities.</p>
         
-        <div style="text-align: center; margin: 30px 0;">
-            <!--[if mso]>
-            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{booking_url}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="17%" stroke="f" fillcolor="#6C5DD3">
-              <w:anchorlock/>
-              <center style="color:#ffffff;font-family:sans-serif;font-size:15px;font-weight:bold;">Claim My Free Audit →</center>
-            </v:roundrect>
-            <![endif]-->
-            <a href="{booking_url}" style="background-color: #6C5DD3; color: #ffffff; display: inline-block; font-family: sans-serif; font-size: 15px; font-weight: bold; line-height: 48px; text-align: center; text-decoration: none; width: 240px; -webkit-text-size-adjust: none; mso-hide: all; border-radius: 8px; box-shadow: 0 4px 12px rgba(108, 93, 211, 0.25);">Claim My Free Audit &rarr;</a>
-        </div>
-        
-        <p style="margin-bottom: 0;">Looking forward to helping you uncover new growth opportunities.</p>
+        <p style="margin-bottom: 0; font-size: 15px; color: #222222; font-family: sans-serif;">
+            Best regards,<br>
+            <strong>Chetan Patil</strong><br>
+            Reach Magnets Team<br>
+            <a href="https://reachmagnets.com" style="color: #1a73e8;">https://reachmagnets.com</a>
+        </p>
         """
     else:
         # General Niche template (Humble & human fallback)
-        subject = f"A humble perspective on {biz_name_str}'s marketing gaps" if biz_name_str else "A humble perspective on your marketing gaps"
+        subject = f"A humble perspective on {biz_name_str}'s visibility gaps" if biz_name_str else "A humble perspective on your visibility gaps"
         business_phrase = biz_name_str if biz_name_str else "your business"
         
         body_content = f"""
-        <p style="margin-top: 0; margin-bottom: 16px;">Hi {to_name},</p>
+        <p style="margin-top: 0; margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Hi {to_name},</p>
         
-        <p style="margin-bottom: 16px;">Most businesses are losing leads every single day, not because their product or service isn't good enough, but because of small, fixable gaps in their marketing: a slow website, poor search visibility, weak SEO, missed GEO (Generative Engine Optimization) opportunities, ineffective AEO (Answer Engine Optimization), collaborative performance marketing campaigns that aren't delivering results, or social media that isn't bringing in real engagement.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">I was recently reviewing search visibility for {business_phrase} and wanted to reach out regarding a few simple gaps in your online presence that might be costing you potential customers.</p>
         
-        <p style="margin-bottom: 16px;">The tricky part? Most businesses don't even know these gaps exist until someone points them out.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We often see local businesses missing out because of a slow website, low local map search rankings, or missing search visibility on new AI assistant results (Generative Engine Optimization/GEO).</p>
         
-        <p style="margin-bottom: 16px;">At <strong>Reach Magnets</strong>, we've helped over 1,000 businesses generate 2 million+ leads through strategic SEO, GEO, AEO, collaborative performance marketing, social media management, and high-converting website solutions, often increasing traffic by 20%+ within months.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We would love to put together a completely free, no-pressure digital marketing audit for you. Here is what we'll check:</p>
         
-        <p style="margin-bottom: 16px;">We'd like to offer {business_phrase} a completely free marketing audit, no strings attached. Here's what you'll get:</p>
+        <ul style="margin-bottom: 18px; padding-left: 20px; font-size: 15px; color: #222222; font-family: sans-serif; line-height: 1.5;">
+            <li><strong>Visibility Audit:</strong> How your website and rankings are performing right now.</li>
+            <li><strong>AI Search Assessment:</strong> Identifying missed search opportunities with AI recommendation engines.</li>
+            <li><strong>Actionable Fixes:</strong> Specific speed and layout improvements to start seeing results faster.</li>
+        </ul>
         
-        <table border="0" cellpadding="0" cellspacing="0" style="margin: 20px 0; padding-left: 10px;">
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>A clear breakdown:</strong> How your marketing is performing right now.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>An SEO, GEO, and AEO visibility assessment:</strong> Identifying missed search and AI opportunities.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>Actionable Fixes:</strong> Specific improvements to start seeing results faster.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 10px; font-size: 14.5px; color: #4b5563;"><strong>Competitor Insights:</strong> Insights into what is working for your direct competitors.</td>
-            </tr>
-            <tr>
-                <td valign="top" style="padding-right: 10px; color: #6C5DD3; font-weight: bold; font-size: 18px; line-height: 1;">•</td>
-                <td style="padding-bottom: 0; font-size: 14.5px; color: #4b5563;"><strong>A custom roadmap:</strong> A structured path to grow your reach, leads, and revenue.</td>
-            </tr>
-        </table>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">It only takes about 15 minutes to review this together. You can pick a convenient time on my calendar here:</p>
         
-        <p style="margin-bottom: 24px;">In just 30 minutes, you'll gain valuable insights that could save you months of trial and error and thousands in wasted marketing spend.</p>
+        <p style="margin-bottom: 24px; font-size: 15px; font-family: sans-serif;">
+            <a href="{booking_url}" style="color: #1a73e8; text-decoration: underline; font-weight: bold;">{booking_url}</a>
+        </p>
         
-        <div style="text-align: center; margin: 30px 0;">
-            <!--[if mso]>
-            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{booking_url}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="17%" stroke="f" fillcolor="#6C5DD3">
-              <w:anchorlock/>
-              <center style="color:#ffffff;font-family:sans-serif;font-size:15px;font-weight:bold;">Claim My Free Audit →</center>
-            </v:roundrect>
-            <![endif]-->
-            <a href="{booking_url}" style="background-color: #6C5DD3; color: #ffffff; display: inline-block; font-family: sans-serif; font-size: 15px; font-weight: bold; line-height: 48px; text-align: center; text-decoration: none; width: 240px; -webkit-text-size-adjust: none; mso-hide: all; border-radius: 8px; box-shadow: 0 4px 12px rgba(108, 93, 211, 0.25);">Claim My Free Audit &rarr;</a>
-        </div>
+        <p style="margin-bottom: 20px; font-size: 15px; color: #222222; font-family: sans-serif;">Looking forward to helping you uncover new visibility opportunities.</p>
         
-        <p style="margin-bottom: 0;">Looking forward to helping you uncover new growth opportunities.</p>
+        <p style="margin-bottom: 0; font-size: 15px; color: #222222; font-family: sans-serif;">
+            Best regards,<br>
+            <strong>Chetan Patil</strong><br>
+            Reach Magnets Team<br>
+            <a href="https://reachmagnets.com" style="color: #1a73e8;">https://reachmagnets.com</a>
+        </p>
         """
 
     full_html = f"""<!DOCTYPE html>
@@ -385,55 +347,15 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{subject}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; color: #1f2937;">
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9fafb; padding: 20px 0;">
-        <tr>
-            <td align="center">
-                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); overflow: hidden;">
-                    <!-- Accent Bar -->
-                    <tr>
-                        <td height="6" style="background-color: #6C5DD3; line-height: 6px; font-size: 6px;">&nbsp;</td>
-                    </tr>
-                    <!-- Header -->
-                    <tr>
-                        <td style="padding: 32px 32px 20px 32px; text-align: center;">
-                            <h1 style="color: #6C5DD3; font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Reach Magnets</h1>
-                            <p style="color: #6b7280; font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin: 6px 0 0 0;">Customer Acquisition & Online Visibility</p>
-                        </td>
-                    </tr>
-                    <!-- Divider -->
-                    <tr>
-                        <td style="padding: 0 32px;">
-                            <hr style="border: 0; border-top: 1px solid #f3f4f6; margin: 0;">
-                        </td>
-                    </tr>
-                    <!-- Body Content -->
-                    <tr>
-                        <td style="padding: 32px; font-size: 15px; line-height: 1.625; color: #374151;">
-                            {body_content}
-                        </td>
-                    </tr>
-                    <!-- Divider -->
-                    <tr>
-                        <td style="padding: 0 32px;">
-                            <hr style="border: 0; border-top: 1px solid #f3f4f6; margin: 0;">
-                        </td>
-                    </tr>
-                    <!-- Footer -->
-                    <tr>
-                        <td style="padding: 24px 32px 32px 32px; text-align: center; background-color: #fafbfe;">
-                            <p style="font-size: 12px; color: #9ca3af; margin: 0 0 8px 0; line-height: 1.5;">
-                                &copy; 2026 Reach Magnets &bull; Digital Marketing Excellence
-                            </p>
-                            <p style="font-size: 11px; color: #cbd5e1; margin: 0; line-height: 1.4;">
-                                If you prefer not to receive helpful audits from us, you can reply "stop" to unsubscribe.
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
+<body style="margin: 0; padding: 20px; background-color: #ffffff; font-family: sans-serif; color: #222222; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;">
+    <div style="max-width: 600px; margin: 0 auto;">
+        {body_content}
+        <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 30px 0 15px 0;">
+        <p style="font-size: 11px; color: #777777; font-family: sans-serif; line-height: 1.4; margin: 0;">
+            &copy; 2026 Reach Magnets &bull; Digital Marketing Excellence<br>
+            If you prefer not to receive helpful visibility audits, reply "stop" to unsubscribe.
+        </p>
+    </div>
 </body>
 </html>
 """
