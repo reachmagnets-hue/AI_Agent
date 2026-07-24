@@ -18,6 +18,10 @@ class Campaign(Base):
     name = Column(String(200), nullable=False)  # e.g. "New York Restaurants May 2026"
     description = Column(Text, nullable=True)
     
+    # Campaign Type — determines execution mode
+    campaign_type = Column(String(50), default="call")
+    # Values: call, email, linkedin
+
     # Settings
     status = Column(String(50), default="draft")
     # Values: draft, active, paused, completed, archived

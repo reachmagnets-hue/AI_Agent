@@ -61,6 +61,15 @@ class Lead(Base):
     
     # LinkedIn Outreach fields
     linkedin_url = Column(String(300), nullable=True, index=True)
+    facebook_url = Column(String(300), nullable=True)
+    instagram_url = Column(String(300), nullable=True)
+    twitter_url = Column(String(300), nullable=True)
+    youtube_url = Column(String(300), nullable=True)
+    
+    # Store / Business Overview & Rating
+    rating = Column(String(50), nullable=True)
+    description = Column(Text, nullable=True)
+    
     linkedin_message = Column(Text, nullable=True)
     linkedin_sent_at = Column(DateTime, nullable=True)
     linkedin_status = Column(String(50), default="pending_approval", index=True)

@@ -78,11 +78,13 @@ async def generate_linkedin_messages_campaign(
                 item = task_db.query(Lead).filter(Lead.id == lid).first()
                 if item:
                     item.linkedin_message = msg  # type: ignore
+                    item.linkedin_status = 'approved' # type: ignore
                     task_db.commit()
             except Exception as e:
                 logger.error("Error saving generated message", lead_id=str(lid), error=str(e))
             finally:
                 task_db.close()
+            await asyncio.sleep(2.0)
                 
     background_tasks.add_task(process_generation)
     return {"message": f"Scheduled message generation for {len(leads)} leads in the background."}
@@ -93,6 +95,7 @@ async def start_linkedin_campaign_run(
     campaign_id: UUID,
     background_tasks: BackgroundTasks,
     limit: int = Query(50, ge=1, le=200),
+    simulate: bool = Query(False, description="Force simulation mode for demo/testing"),
     db: Session = Depends(get_db)
 ):
     """
@@ -114,7 +117,7 @@ async def start_linkedin_campaign_run(
     if ready_count == 0:
         raise HTTPException(status_code=400, detail="No leads with generated LinkedIn messages ready to send in this campaign.")
         
-    background_tasks.add_task(send_linkedin_campaign, str(campaign_id), limit)
+    background_tasks.add_task(send_linkedin_campaign, str(campaign_id), limit, simulate)
     
     return {"message": f"LinkedIn campaign outreach started. Dispatching to {min(ready_count, limit)} leads."}
 

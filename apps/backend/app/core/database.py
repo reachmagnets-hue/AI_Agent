@@ -61,7 +61,13 @@ def create_tables():
             "email_opened_at": "DATETIME",
             "email_clicked_at": "DATETIME",
             "email_bounced_at": "DATETIME",
-            "email_blocked_at": "DATETIME"
+            "email_blocked_at": "DATETIME",
+            "facebook_url": "VARCHAR(300)",
+            "instagram_url": "VARCHAR(300)",
+            "twitter_url": "VARCHAR(300)",
+            "youtube_url": "VARCHAR(300)",
+            "rating": "VARCHAR(50)",
+            "description": "TEXT"
         }
         
         with engine.begin() as conn:
@@ -69,6 +75,17 @@ def create_tables():
                 if col_name not in columns:
                     conn.execute(text(f"ALTER TABLE leads ADD COLUMN {col_name} {col_type}"))
                     logger.info(f"Added column {col_name} to leads table successfully")
+
+        # Check and apply migrations on campaigns table
+        camp_columns = [c["name"] for c in inspector.get_columns("campaigns")]
+        new_camp_cols = {
+            "campaign_type": "VARCHAR(50) DEFAULT 'call'",
+        }
+        with engine.begin() as conn:
+            for col_name, col_type in new_camp_cols.items():
+                if col_name not in camp_columns:
+                    conn.execute(text(f"ALTER TABLE campaigns ADD COLUMN {col_name} {col_type}"))
+                    logger.info(f"Added column {col_name} to campaigns table successfully")
     except Exception as e:
         logger.error(f"Failed to create database tables: {str(e)}", exc_info=True)
 

@@ -119,6 +119,9 @@ AGENT_CONFIG = {
     "interruption_sensitivity": 0.8,
     "end_call_after_silence_ms": 30000,
     "max_call_duration_ms": 600000,
+    "voicemail_option": {
+        "action": "end_call"
+    },
     "post_call_analysis_data": [
         {
             "name": "outcome",
@@ -341,6 +344,7 @@ async def create_retell_agent(llm_id: str) -> str:
         interruption_sensitivity=0.8,
         end_call_after_silence_ms=30000,
         max_call_duration_ms=600000,
+        voicemail_option={"action": "end_call"},
         post_call_analysis_data=[
             {
                 "name": "outcome",
@@ -645,6 +649,7 @@ Identify prospect alignment: Interested, Neutral, or Not interested. Also identi
     client.agent.update(
         agent_id=agent_id,
         agent_name="Ojas - Reach Magnets",
+        voicemail_option={"action": "end_call"},
         post_call_analysis_data=post_call_analysis_data  # type: ignore
     )
     print("Agent updated successfully!")

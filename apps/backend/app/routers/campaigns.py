@@ -55,6 +55,22 @@ def get_campaigns(
     
     unpicked_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.status.in_(["failed", "no_answer", "voicemail", "busy"]), Lead.is_active == True).group_by(Lead.campaign_id).all()
     unpicked_map = {cid: count for cid, count in unpicked_counts if cid is not None}
+
+    # Email Specific Metrics Maps
+    email_sent_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.email_sent_at.isnot(None), Lead.is_active == True).group_by(Lead.campaign_id).all()
+    email_sent_map = {cid: count for cid, count in email_sent_counts if cid is not None}
+
+    email_delivered_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.email_sent_at.isnot(None), Lead.email_status.notin_(["bounced", "blocked"]), Lead.is_active == True).group_by(Lead.campaign_id).all()
+    email_delivered_map = {cid: count for cid, count in email_delivered_counts if cid is not None}
+
+    email_opened_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(or_(Lead.email_status.in_(["opened", "clicked", "replied"]), Lead.email_opened_at.isnot(None)), Lead.is_active == True).group_by(Lead.campaign_id).all()
+    email_opened_map = {cid: count for cid, count in email_opened_counts if cid is not None}
+
+    email_replied_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.email_status == "replied", Lead.is_active == True).group_by(Lead.campaign_id).all()
+    email_replied_map = {cid: count for cid, count in email_replied_counts if cid is not None}
+
+    email_pending_counts = db.query(Lead.campaign_id, func.count(Lead.id)).filter(Lead.email_sent_at.is_(None), Lead.is_active == True).group_by(Lead.campaign_id).all()
+    email_pending_map = {cid: count for cid, count in email_pending_counts if cid is not None}
     
     data = []
     for c in campaigns:
@@ -62,14 +78,25 @@ def get_campaigns(
         total_called = calls_map.get(c.id, 0)
         total_answered = answered_map.get(c.id, 0)
         total_booked = booked_map.get(c.id, 0)
-        total_pending = pending_map.get(c.id, 0)
         total_unpicked = unpicked_map.get(c.id, 0)
+        
+        email_sent = email_sent_map.get(c.id, 0)
+        email_delivered = email_delivered_map.get(c.id, 0)
+        email_opened = email_opened_map.get(c.id, 0)
+        email_replied = email_replied_map.get(c.id, 0)
+
+        camp_type = getattr(c, "campaign_type", "call") or "call"
+        if camp_type == "email":
+            total_pending = email_pending_map.get(c.id, max(0, total_leads - email_sent))
+        else:
+            total_pending = pending_map.get(c.id, 0)
         
         data.append({
             "id": c.id,
             "name": c.name,
             "description": c.description,
             "status": c.status,
+            "campaign_type": camp_type,
             "start_time": c.start_time,
             "end_time": c.end_time,
             "timezone": c.timezone,
@@ -83,6 +110,10 @@ def get_campaigns(
             "total_booked": total_booked,
             "total_pending": total_pending,
             "total_unpicked": total_unpicked,
+            "email_sent": email_sent,
+            "email_delivered": email_delivered,
+            "email_opened": email_opened,
+            "email_replied": email_replied,
             "created_at": c.created_at,
             "started_at": c.started_at,
             "completed_at": c.completed_at
@@ -103,6 +134,12 @@ def get_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
     booked = db.query(Appointment).filter(Appointment.campaign_id == campaign_id).count()
     no_answer = db.query(Call).filter(Call.campaign_id == campaign_id, Call.status == "no_answer").count()
     
+    # Email stats
+    email_sent = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.email_sent_at.isnot(None), Lead.is_active == True).count()
+    email_delivered = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.email_sent_at.isnot(None), Lead.email_status.notin_(["bounced", "blocked"]), Lead.is_active == True).count()
+    email_opened = db.query(Lead).filter(Lead.campaign_id == campaign_id, or_(Lead.email_status.in_(["opened", "clicked", "replied"]), Lead.email_opened_at.isnot(None)), Lead.is_active == True).count()
+    email_replied = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.email_status == "replied", Lead.is_active == True).count()
+
     # Cost estimation
     total_duration_sec = db.query(func.sum(Call.duration_seconds)).filter(Call.campaign_id == campaign_id).scalar() or 0
     total_minutes = total_duration_sec / 60.0
@@ -120,7 +157,11 @@ def get_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
         "conversion_rate": round(booked / answered * 100.0, 1) if answered > 0 else 0.0,
         "avg_call_duration": round(total_duration_sec / called, 1) if called > 0 else 0.0,
         "total_call_minutes": round(total_minutes, 1),
-        "estimated_cost": round(estimated_cost, 2)
+        "estimated_cost": round(estimated_cost, 2),
+        "email_sent": email_sent,
+        "email_delivered": email_delivered,
+        "email_opened": email_opened,
+        "email_replied": email_replied
     }
 
     # Fetch last 10 calls
@@ -140,6 +181,7 @@ def get_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
 def create_campaign(
     name: str = Query(...),
     description: Optional[str] = None,
+    campaign_type: str = Query("call"),
     start_time: str = Query("09:00"),
     end_time: str = Query("18:00"),
     timezone: str = Query("America/New_York"),
@@ -149,14 +191,27 @@ def create_campaign(
     ai_persona_name: str = Query("Alex"),
     contact_ids: Optional[List[UUID]] = Query(None),
     assign_unassigned: bool = Query(False),
+    assign_all: bool = Query(False),
+    assign_all_with_email: bool = Query(False),
+    lead_scope: Optional[str] = Query(None),
     source_files: Optional[List[str]] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """Create a new campaign and associate leads"""
+    """Create a new campaign and associate leads using flexible filters"""
+    from datetime import date, datetime, timedelta
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    yesterday_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
+    yesterday_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
+
+    # Normalise campaign type
+    valid_types = {"call", "email", "linkedin"}
+    if campaign_type not in valid_types:
+        campaign_type = "call"
     campaign = Campaign(
         name=name,
         description=description,
         status="draft",
+        campaign_type=campaign_type,
         start_time=start_time,
         end_time=end_time,
         timezone=timezone,
@@ -173,14 +228,42 @@ def create_campaign(
     if contact_ids:
         db.query(Lead).filter(Lead.id.in_(contact_ids)).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
         db.commit()
-        
+
+    # Scope-based assignment
+    if lead_scope == "extracted_today":
+        db.query(Lead).filter(Lead.is_active == True, Lead.created_at >= today_start).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
+        db.commit()
+    elif lead_scope == "extracted_yesterday":
+        db.query(Lead).filter(Lead.is_active == True, Lead.created_at >= yesterday_start, Lead.created_at <= yesterday_end).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
+        db.commit()
+    elif lead_scope == "unsent_today":
+        db.query(Lead).filter(Lead.is_active == True, Lead.email.isnot(None), Lead.email != "", Lead.created_at >= today_start, Lead.email_sent_at.is_(None)).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
+        db.commit()
+    elif lead_scope == "unsent_yesterday":
+        db.query(Lead).filter(Lead.is_active == True, Lead.email.isnot(None), Lead.email != "", Lead.created_at >= yesterday_start, Lead.created_at <= yesterday_end, Lead.email_sent_at.is_(None)).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
+        db.commit()
+    elif lead_scope == "unsent_all":
+        db.query(Lead).filter(Lead.is_active == True, Lead.email.isnot(None), Lead.email != "", Lead.email_sent_at.is_(None)).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
+        db.commit()
+    # Associate ALL leads in the DB
+    elif assign_all:
+        db.query(Lead).filter(Lead.is_active == True).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
+        db.commit()
+    # Associate ALL leads that have an email address
+    elif assign_all_with_email:
+        db.query(Lead).filter(
+            Lead.is_active == True,
+            Lead.email != None,
+            Lead.email != ''
+        ).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
+        db.commit()
     # Associate all unassigned leads if requested
-    if assign_unassigned:
+    elif assign_unassigned:
         db.query(Lead).filter(Lead.campaign_id.is_(None), Lead.is_active == True).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
         db.commit()
 
     # Associate unassigned leads matching selected source files
-    if source_files:
+    if source_files and not assign_all and not assign_all_with_email and not lead_scope:
         db.query(Lead).filter(Lead.campaign_id.is_(None), Lead.is_active == True, Lead.source.in_(source_files)).update({Lead.campaign_id: campaign.id}, synchronize_session=False)
         db.commit()
         
@@ -404,13 +487,11 @@ async def make_single_call_sqlalchemy(lead_id: UUID, campaign_id: UUID, retell_s
         lead.total_calls += 1 # type: ignore
         lead.last_called_at = datetime.now(timezone.utc) # type: ignore
         
-        # Send initial outreach SMS & Email in the background
+        # Send initial outreach Email in the background. SMS outreach is disabled here
+        # and instead sent after the call completes, gated by a 15-second minimum talk duration.
         import asyncio
-        from app.utils.automations import send_outreach_sms, send_outreach_email
+        from app.utils.automations import send_outreach_email
         
-        if lead.phone:
-            asyncio.create_task(send_outreach_sms(str(lead.phone), lead.full_name or "there", lead.business_name)) # type: ignore
-            call_log.sms_sent = True # type: ignore
         if lead.email:
             asyncio.create_task(send_outreach_email(str(lead.email), lead.full_name or "there", lead.business_name, lead.business_type, lead_id=str(lead.id))) # type: ignore
             call_log.email_sent = True # type: ignore

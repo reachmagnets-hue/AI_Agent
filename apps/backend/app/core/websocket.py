@@ -13,10 +13,13 @@ class ConnectionManager:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
+        import asyncio
         for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception:
-                pass
+            async def send_safe(conn):
+                try:
+                    await asyncio.wait_for(conn.send_json(message), timeout=2.0)
+                except Exception:
+                    pass
+            asyncio.create_task(send_safe(connection))
 
 websocket_manager = ConnectionManager()

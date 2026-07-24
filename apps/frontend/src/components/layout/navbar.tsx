@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Home, Users, Phone, BarChart3, Calendar, Linkedin } from 'lucide-react';
+import { Menu, Home, Users, Phone, BarChart3, Calendar, Linkedin, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navigation = [
@@ -15,6 +15,7 @@ const navigation = [
   { name: 'Call Logs', href: '/calls', icon: Phone },
   { name: 'Appointments', href: '/appointments', icon: Calendar },
   { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
+  { name: 'Data Extraction', href: '/extraction', icon: MapPin },
 ];
 
 export function Navbar() {

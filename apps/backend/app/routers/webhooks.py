@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import structlog
 from uuid import UUID
 
@@ -66,7 +66,8 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
         
         campaign_id = UUID(campaign_id_str) if campaign_id_str else None
         lead_id = UUID(contact_id_str) if contact_id_str else None
-
+        lead = None
+        
         if event == "call_started":
             # Check if record exists
             call_record = db.query(Call).filter(Call.retell_call_id == call_id).first()
@@ -76,7 +77,7 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                     campaign_id=campaign_id,
                     retell_call_id=call_id,
                     status="initiated",
-                    started_at=datetime.utcnow()
+                    started_at=datetime.now(timezone.utc)
                 )
                 db.add(new_call)
                 db.commit()
@@ -109,7 +110,7 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                 "recording_url": recording_url,
                 "ai_summary": ai_summary,
                 "objection_raised": custom_analysis.get("objection_raised"),
-                "ended_at": datetime.utcnow()
+                "ended_at": datetime.now(timezone.utc)
             }
             
             if call_record:
@@ -156,13 +157,13 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
             if lead_id:
                 lead = db.query(Lead).filter(Lead.id == lead_id).first()
                 if lead:
-                    lead.status = contact_status
-                    lead.last_called_at = datetime.utcnow()
-                    lead.total_calls = (lead.total_calls or 0) + 1
+                    setattr(lead, "status", contact_status)
+                    setattr(lead, "last_called_at", datetime.now(timezone.utc))
+                    setattr(lead, "total_calls", int(getattr(lead, "total_calls") or 0) + 1)
                     
                     # Save AI-extracted call summary to lead
                     if ai_summary and not lead.ai_summary:
-                        lead.ai_summary = ai_summary
+                        setattr(lead, "ai_summary", ai_summary)
 
                     # Update Lead scoring status and decision maker info
                     score_status = custom_analysis.get("lead_score_status", "Neutral")
@@ -179,16 +180,14 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                     elif contact_status == "not_interested":
                         numeric_score = 10
                     
-                    lead.lead_score = numeric_score
+                    setattr(lead, "lead_score", numeric_score)
                     
                     dm_status = custom_analysis.get("is_decision_maker", "Uncertain")
                     notes_addon = f"[AI Audit] Decision Maker: {dm_status} | Lead Score status: {score_status}"
-                    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                     formatted_note = f"\n[{timestamp}] {notes_addon}"
-                    if lead.internal_notes:
-                        lead.internal_notes += formatted_note
-                    else:
-                        lead.internal_notes = formatted_note.strip()
+                    notes_val = str(lead.internal_notes or "") + formatted_note
+                    setattr(lead, "internal_notes", notes_val.strip() if not lead.internal_notes else notes_val)
                     
                     # Dynamically capture contact details collected by Alex during the call
                     extracted_name = (
@@ -248,7 +247,7 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                         )
                         db.add(appt)
                         if call_record:
-                            call_record.meeting_booked = True
+                            setattr(call_record, "meeting_booked", True)
                         
                     db.commit()
                     
@@ -256,9 +255,9 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                     if appointment_booked or contact_status == "interested":
                         from app.utils.automations import send_appointment_email, send_appointment_sms, send_whatsapp_message
                         
-                        contact_name = lead.full_name or "Valued Client"
-                        contact_phone = lead.phone
-                        contact_email = lead.email or "audit@reachmagnets.com"
+                        contact_name: str = str(lead.full_name or "Valued Client")
+                        contact_phone: str = str(lead.phone or "")
+                        contact_email: str = str(lead.email or "audit@reachmagnets.com")
                         
                         background_tasks.add_task(
                             send_appointment_sms,
@@ -284,8 +283,8 @@ async def handle_retell_webhook(payload: Dict[str, Any], background_tasks: Backg
                             whatsapp_msg
                         )
                         if call_record:
-                            call_record.sms_sent = True
-                            call_record.email_sent = True
+                            setattr(call_record, "sms_sent", True)
+                            setattr(call_record, "email_sent", True)
                             db.commit()
 
             # Broadcast real-time call completed event to CRM
@@ -332,15 +331,15 @@ async def process_vapi_call_update(db: Session, call_data: Dict[str, Any]):
                 lead_id=lead_id,
                 campaign_id=campaign_id,
                 twilio_call_sid=call_id,
-                status=get_vapi_internal_status(status),
-                started_at=datetime.utcnow()
+                status=get_vapi_internal_status(str(status or "")),
+                started_at=datetime.now(timezone.utc)
             )
             db.add(new_call)
             db.commit()
     else:
-        call_record.status = get_vapi_internal_status(status)
+        setattr(call_record, "status", get_vapi_internal_status(str(status or "")))
         if status == "answered" and call_record.campaign_id:
-            await increment_campaign_stats_db(db, call_record.campaign_id, "answered")
+            await increment_campaign_stats_db(db, UUID(str(call_record.campaign_id)), "answered")
         db.commit()
 
 async def process_vapi_call_completed(db: Session, call_data: Dict[str, Any], background_tasks: BackgroundTasks):
@@ -348,22 +347,22 @@ async def process_vapi_call_completed(db: Session, call_data: Dict[str, Any], ba
     call_record = db.query(Call).filter(Call.twilio_call_sid == call_id).first()
     
     if call_record:
-        call_record.status = "completed"
-        call_record.duration_seconds = call_data.get("duration", 0)
-        call_record.transcript = call_data.get("transcript", "")
-        call_record.recording_url = call_data.get("recordingUrl")
-        call_record.ended_at = datetime.utcnow()
+        setattr(call_record, "status", "completed")
+        setattr(call_record, "duration_seconds", call_data.get("duration", 0))
+        setattr(call_record, "transcript", call_data.get("transcript", ""))
+        setattr(call_record, "recording_url", str(call_data.get("recordingUrl") or ""))
+        setattr(call_record, "ended_at", datetime.now(timezone.utc))
         
         contact_status = analyze_transcript_intent(call_data.get("transcript", ""))
         
         lead = db.query(Lead).filter(Lead.id == call_record.lead_id).first()
         if lead:
-            lead.status = contact_status
+            setattr(lead, "status", contact_status)
             
         db.commit()
         
         if call_record.campaign_id:
-            await increment_campaign_stats_db(db, call_record.campaign_id, "completed")
+            await increment_campaign_stats_db(db, UUID(str(call_record.campaign_id)), "completed")
 
 async def process_vapi_call_ended(db: Session, call_data: Dict[str, Any]):
     call_id = call_data.get("id")
@@ -371,18 +370,18 @@ async def process_vapi_call_ended(db: Session, call_data: Dict[str, Any]):
     
     call_record = db.query(Call).filter(Call.twilio_call_sid == call_id).first()
     if call_record:
-        vapi_status = get_vapi_internal_status(status)
-        call_record.status = vapi_status
-        call_record.ended_at = datetime.utcnow()
+        vapi_status = get_vapi_internal_status(str(status or ""))
+        setattr(call_record, "status", vapi_status)
+        setattr(call_record, "ended_at", datetime.now(timezone.utc))
         
         lead = db.query(Lead).filter(Lead.id == call_record.lead_id).first()
         if lead:
-            lead.status = "failed" if vapi_status == "failed" else "called"
+            setattr(lead, "status", "failed" if vapi_status == "failed" else "called")
             
         db.commit()
         
         if call_record.campaign_id:
-            await increment_campaign_stats_db(db, call_record.campaign_id, vapi_status)
+            await increment_campaign_stats_db(db, UUID(str(call_record.campaign_id)), vapi_status)
 
 def get_vapi_internal_status(vapi_status: str) -> str:
     status_mapping = {
@@ -433,11 +432,11 @@ def analyze_transcript_intent(transcript: str) -> str:
 async def increment_campaign_stats_db(db: Session, campaign_id: UUID, status_type: str):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if campaign:
-        campaign.total_called += 1
+        setattr(campaign, 'total_called', int(getattr(campaign, 'total_called') or 0) + 1)
         if status_type in ["completed", "answered"]:
-            campaign.total_answered += 1
+            setattr(campaign, 'total_answered', int(getattr(campaign, 'total_answered') or 0) + 1)
         if status_type == "meeting_booked":
-            campaign.total_booked += 1
+            setattr(campaign, 'total_booked', int(getattr(campaign, 'total_booked') or 0) + 1)
         db.commit()
 
 from typing import Union, List
@@ -465,30 +464,32 @@ async def handle_brevo_webhook(payload: Union[Dict[str, Any], List[Dict[str, Any
             lead = db.query(Lead).filter(Lead.email == email, Lead.is_active == True).order_by(Lead.updated_at.desc()).first()
             
         if lead:
-            now_utc = datetime.utcnow()
+            now_utc = datetime.now(timezone.utc)
             if event in ["request", "sent"]:
-                lead.email_status = "sent"
+                setattr(lead, "email_status", "sent")
             elif event == "delivered":
-                lead.email_status = "delivered"
-                lead.email_delivered_at = now_utc
+                setattr(lead, "email_status", "delivered")
+                setattr(lead, "email_delivered_at", now_utc)
             elif event in ["opened", "unique_opened"]:
-                lead.email_status = "opened"
+                setattr(lead, "email_status", "opened")
                 if not lead.email_opened_at:
-                    lead.email_opened_at = now_utc
+                    setattr(lead, "email_opened_at", now_utc)
+            elif event in ["reply", "replied"]:
+                setattr(lead, "email_status", "replied")
             elif event == "click":
-                lead.email_status = "clicked"
+                setattr(lead, "email_status", "clicked")
                 if not lead.email_clicked_at:
-                    lead.email_clicked_at = now_utc
+                    setattr(lead, "email_clicked_at", now_utc)
             elif event in ["bounces", "bounce", "hardBounce", "softBounce"]:
-                lead.email_status = "bounced"
-                lead.email_bounced_at = now_utc
+                setattr(lead, "email_status", "bounced")
+                setattr(lead, "email_bounced_at", now_utc)
             elif event in ["blocked", "spam", "unsubscribed"]:
-                lead.email_status = "blocked"
-                lead.email_blocked_at = now_utc
+                setattr(lead, "email_status", "blocked")
+                setattr(lead, "email_blocked_at", now_utc)
                 
-            lead.updated_at = now_utc
+            setattr(lead, "updated_at", now_utc)
             db.commit()
-            results.append({"lead_id": str(lead.id), "status": lead.email_status})
+            results.append({"lead_id": str(lead.id), "status": str(lead.email_status or "")})
             
     return {"status": "success", "updates": results}
 

@@ -16,6 +16,170 @@ from app.utils.dnc import is_on_dnc_registry
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
+from fastapi.responses import StreamingResponse
+
+@router.get("/export/csv")
+def export_leads_csv(
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    campaign_id: Optional[str] = Query(None),
+    business_type: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    called_from: Optional[date] = Query(None),
+    called_to: Optional[date] = Query(None),
+    has_meeting: Optional[bool] = Query(None),
+    no_answer: Optional[bool] = Query(None),
+    has_linkedin: Optional[bool] = Query(None),
+    has_social: Optional[bool] = Query(None),
+    has_email: Optional[bool] = Query(None),
+    has_phone: Optional[bool] = Query(None),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
+    db: Session = Depends(get_db)
+):
+    """Export filtered leads as a CSV download"""
+    query = db.query(Lead).filter(Lead.is_active == True)
+    
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            or_(
+                Lead.full_name.ilike(search_filter),
+                Lead.phone.ilike(search_filter),
+                Lead.email.ilike(search_filter),
+                Lead.business_name.ilike(search_filter)
+            )
+        )
+        
+    if status:
+        query = query.filter(Lead.status == status)
+    if campaign_id:
+        if campaign_id == "unassigned":
+            query = query.filter(Lead.campaign_id.is_(None))
+        else:
+            try:
+                camp_uuid = UUID(campaign_id)
+                query = query.filter(Lead.campaign_id == camp_uuid)
+            except ValueError:
+                pass
+    if business_type:
+        query = query.filter(Lead.business_type == business_type)
+    if priority:
+        query = query.filter(Lead.priority == priority)
+        
+    if date_from:
+        query = query.filter(Lead.created_at >= datetime.combine(date_from, datetime.min.time()))
+    if date_to:
+        query = query.filter(Lead.created_at <= datetime.combine(date_to, datetime.max.time()))
+        
+    if called_from:
+        query = query.filter(Lead.last_called_at >= datetime.combine(called_from, datetime.min.time()))
+    if called_to:
+        query = query.filter(Lead.last_called_at <= datetime.combine(called_to, datetime.max.time()))
+        
+    if has_meeting is not None:
+        if has_meeting:
+            query = query.filter(Lead.appointments.any())
+        else:
+            query = query.filter(~Lead.appointments.any())
+            
+    if no_answer is not None:
+        if no_answer:
+            query = query.filter(Lead.total_calls == 0)
+        else:
+            query = query.filter(Lead.total_calls > 0)
+
+    if has_linkedin is not None:
+        if has_linkedin:
+            query = query.filter(Lead.linkedin_url.isnot(None))
+        else:
+            query = query.filter(Lead.linkedin_url.is_(None))
+
+    if has_social is not None:
+        if has_social:
+            query = query.filter(
+                or_(
+                    Lead.facebook_url.isnot(None),
+                    Lead.instagram_url.isnot(None),
+                    Lead.linkedin_url.isnot(None),
+                    Lead.twitter_url.isnot(None),
+                    Lead.youtube_url.isnot(None)
+                )
+            )
+        else:
+            query = query.filter(
+                and_(
+                    Lead.facebook_url.is_(None),
+                    Lead.instagram_url.is_(None),
+                    Lead.linkedin_url.is_(None),
+                    Lead.twitter_url.is_(None),
+                    Lead.youtube_url.is_(None)
+                )
+            )
+            
+    if has_email is not None:
+        if has_email:
+            query = query.filter(Lead.email.isnot(None))
+        else:
+            query = query.filter(Lead.email.is_(None))
+
+    if has_phone is not None:
+        if has_phone:
+            query = query.filter(Lead.phone.isnot(None))
+        else:
+            query = query.filter(Lead.phone.is_(None))
+
+    query = query.options(joinedload(Lead.campaign))
+    
+    sort_column = getattr(Lead, sort_by, Lead.created_at)
+    if sort_order.lower() == "desc":
+        query = query.order_by(desc(sort_column))
+    else:
+        query = query.order_by(sort_column)
+
+    leads = query.all()
+
+    # Generate CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Headers
+    writer.writerow([
+        "Business Name", "Full Name", "Phone", "Email", "Website", 
+        "Facebook URL", "Instagram URL", "LinkedIn URL", "Twitter URL", "YouTube URL",
+        "Directory Profiles & Notes", "Rating", "Description", "Status", "Priority", "Campaign"
+    ])
+    
+    for lead in leads:
+        writer.writerow([
+            lead.business_name or "",
+            lead.full_name or "",
+            lead.phone or "",
+            lead.email or "",
+            lead.website or "",
+            lead.facebook_url or "",
+            lead.instagram_url or "",
+            lead.linkedin_url or "",
+            lead.twitter_url or "",
+            lead.youtube_url or "",
+            lead.internal_notes or "",
+            lead.rating or "",
+            lead.description or "",
+            lead.status or "",
+            lead.priority or "",
+            lead.campaign.name if lead.campaign else ""
+        ])
+        
+    output.seek(0)
+    
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=reach_magnet_leads.csv"}
+    )
+
 @router.get("/")
 @router.get("")
 def get_leads(
@@ -31,6 +195,7 @@ def get_leads(
     has_meeting: Optional[bool] = Query(None),
     no_answer: Optional[bool] = Query(None),
     has_linkedin: Optional[bool] = Query(None),
+    has_social: Optional[bool] = Query(None),
     has_email: Optional[bool] = Query(None),
     has_phone: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
@@ -96,6 +261,28 @@ def get_leads(
             query = query.filter(Lead.linkedin_url.isnot(None))
         else:
             query = query.filter(Lead.linkedin_url.is_(None))
+
+    if has_social is not None:
+        if has_social:
+            query = query.filter(
+                or_(
+                    Lead.facebook_url.isnot(None),
+                    Lead.instagram_url.isnot(None),
+                    Lead.linkedin_url.isnot(None),
+                    Lead.twitter_url.isnot(None),
+                    Lead.youtube_url.isnot(None)
+                )
+            )
+        else:
+            query = query.filter(
+                and_(
+                    Lead.facebook_url.is_(None),
+                    Lead.instagram_url.is_(None),
+                    Lead.linkedin_url.is_(None),
+                    Lead.twitter_url.is_(None),
+                    Lead.youtube_url.is_(None)
+                )
+            )
             
     if has_email is not None:
         if has_email:
@@ -222,6 +409,76 @@ def get_lead_sources(db: Session = Depends(get_db)):
             "unassigned": int(row.unassigned) if row.unassigned else 0
         })
     return sources
+
+@router.get("/counts")
+def get_lead_counts(db: Session = Depends(get_db)):
+    """Get total lead counts for campaign creation UI including extraction date breakdowns"""
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    yesterday_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
+    yesterday_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
+
+    total = db.query(func.count(Lead.id)).filter(Lead.is_active == True).scalar() or 0
+    with_email = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != ""
+    ).scalar() or 0
+    with_phone = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.phone.isnot(None),
+        Lead.phone != ""
+    ).scalar() or 0
+    unassigned = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.campaign_id.is_(None)
+    ).scalar() or 0
+
+    extracted_today = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.created_at >= today_start
+    ).scalar() or 0
+
+    extracted_yesterday = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.created_at >= yesterday_start,
+        Lead.created_at <= yesterday_end
+    ).scalar() or 0
+
+    unsent_email_today = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.created_at >= today_start,
+        Lead.email_sent_at.is_(None)
+    ).scalar() or 0
+
+    unsent_email_yesterday = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.created_at >= yesterday_start,
+        Lead.created_at <= yesterday_end,
+        Lead.email_sent_at.is_(None)
+    ).scalar() or 0
+
+    unsent_email_all = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.email_sent_at.is_(None)
+    ).scalar() or 0
+
+    return {
+        "total": total,
+        "with_email": with_email,
+        "with_phone": with_phone,
+        "unassigned": unassigned,
+        "extracted_today": extracted_today,
+        "extracted_yesterday": extracted_yesterday,
+        "unsent_email_today": unsent_email_today,
+        "unsent_email_yesterday": unsent_email_yesterday,
+        "unsent_email_all": unsent_email_all
+    }
 
 @router.get("/{lead_id}")
 def get_lead(lead_id: UUID, db: Session = Depends(get_db)):

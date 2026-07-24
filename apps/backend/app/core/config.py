@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     SIMULATE_CALLS: bool = True
 
+    ENABLE_AUTONOMOUS_SCHEDULER: bool = False
+
     # Logging Configuration
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"

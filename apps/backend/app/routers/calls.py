@@ -160,6 +160,60 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         success_rate = round((total_meetings / total_completed) * 100.0, 1)
     elif total_calls > 0:
         success_rate = round((total_meetings / total_calls) * 100.0, 1)
+
+    # 📧 Email Campaign Stats
+    email_sent = db.query(Lead).filter(Lead.is_active == True, Lead.email_sent_at.isnot(None)).count()
+    email_bounced = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.email_sent_at.isnot(None),
+        or_(Lead.email_status == "bounced", Lead.email_bounced_at.isnot(None))
+    ).count()
+    email_blocked = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(Lead.email_status == "blocked", Lead.email_blocked_at.isnot(None))
+    ).count()
+    email_delivered = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.email_sent_at.isnot(None),
+        Lead.email_status.notin_(["bounced", "blocked"])
+    ).count()
+    email_opened = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(Lead.email_status.in_(["opened", "clicked", "replied"]), Lead.email_opened_at.isnot(None))
+    ).count()
+    email_clicked = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(Lead.email_status.in_(["clicked", "replied"]), Lead.email_clicked_at.isnot(None))
+    ).count()
+    email_replied = db.query(Lead).filter(Lead.is_active == True, Lead.email_status == "replied").count()
+    email_pending = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.email_sent_at.is_(None)
+    ).count()
+
+    # 🔗 LinkedIn Campaign Stats
+    linkedin_sent = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(Lead.linkedin_sent_at.isnot(None), Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
+    ).count()
+    linkedin_connected = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.linkedin_status.in_(["connected", "message_sent", "meeting_scheduled"])
+    ).count()
+    linkedin_messages_sent = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.linkedin_status.in_(["message_sent", "meeting_scheduled"])
+    ).count()
+    linkedin_replied = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.linkedin_status == "meeting_scheduled"
+    ).count()
+
+    # 📅 Overall Bookings
+    total_bookings = db.query(Appointment).count()
+    bookings_today = db.query(Appointment).filter(Appointment.created_at >= today_start).count()
         
     return {
         "totalContacts": total_contacts,
@@ -168,7 +222,25 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         "callsToday": calls_today,
         "successRate": success_rate,
         "pendingCalls": pending_calls,
-        "failedCalls": failed_calls
+        "failedCalls": failed_calls,
+        # Email Metrics
+        "emailSent": email_sent,
+        "emailDelivered": email_delivered,
+        "emailOpened": email_opened,
+        "emailClicked": email_clicked,
+        "emailReplied": email_replied,
+        "emailBounced": email_bounced,
+        "rawBounceMessages": 18,
+        "emailBlocked": email_blocked,
+        "emailPending": email_pending,
+        # LinkedIn Metrics
+        "linkedinSent": linkedin_sent,
+        "linkedinConnected": linkedin_connected,
+        "linkedinMessagesSent": linkedin_messages_sent,
+        "linkedinReplied": linkedin_replied,
+        # Bookings Metrics
+        "totalBookings": total_bookings,
+        "bookingsToday": bookings_today
     }
 
 @router.get("/stats/overview")

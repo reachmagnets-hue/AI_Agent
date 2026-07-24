@@ -97,13 +97,28 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 if not campaign or campaign.status != "active":
                     logger.info("Exiting campaign dialer loop: campaign is no longer active", campaign_id=str(campaign_id))
                     break
+                
+                # Intercept LinkedIn campaign
+                camp_type = getattr(campaign, "campaign_type", None) or ""
+                if camp_type == "linkedin" or (not camp_type and campaign.name and ("linkedin" in campaign.name.lower() or "linked in" in campaign.name.lower())):
+                    logger.info("Intercepted LinkedIn campaign. Starting LinkedIn outreach flow.", campaign_name=campaign.name)
+                    from app.services.linkedin_sender import send_linkedin_campaign
+                    # Trigger the LinkedIn campaign execution
+                    res = await send_linkedin_campaign(str(campaign_id))
+                    logger.info("LinkedIn campaign execution done", result=res)
+                    setattr(campaign, "status", "completed")
+                    setattr(campaign, "completed_at", datetime.now(timezone.utc))
+                    db.commit()
+                    break
                     
-                # Pull next pending lead
+                # Pull next pending lead (excluding bounced leads)
                 lead = db.query(Lead).filter(
                     Lead.campaign_id == campaign_id,
                     Lead.status == "pending",
                     Lead.is_dnc == False,
-                    Lead.is_active == True
+                    Lead.is_active == True,
+                    Lead.email_status != "bounced",
+                    Lead.email_bounced_at.is_(None)
                 ).order_by(Lead.created_at).first()
                 
                 if not lead:
@@ -120,15 +135,20 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
             finally:
                 db.close()
                 
-            # Check if this is an email-only campaign based on campaign name
+            # Check campaign type (prefer DB field, fallback to name detection for legacy)
             is_email_only = False
             db_check = SessionLocal()
             try:
                 camp_check = db_check.query(Campaign).filter(Campaign.id == campaign_id).first()
-                if camp_check and camp_check.name:
-                    name_lower = camp_check.name.lower()
-                    if "email" in name_lower or "e mail" in name_lower:
+                if camp_check:
+                    camp_type = getattr(camp_check, "campaign_type", None) or ""
+                    if camp_type == "email":
                         is_email_only = True
+                    elif not camp_type and camp_check.name:
+                        # Legacy: fall back to name detection
+                        name_lower = camp_check.name.lower()
+                        if "email" in name_lower or "e mail" in name_lower:
+                            is_email_only = True
             except Exception as check_err:
                 logger.error("Error checking campaign type", error=str(check_err))
             finally:
@@ -143,27 +163,30 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                         if db_item.email:
                             from app.utils.automations import send_outreach_email
                             # Update lead status to calling/sending to prevent double execution
-                            db_item.status = "calling"
+                            db_item.status = "calling"  # type: ignore
                             db_update.commit()
                             
                             # Send email
                             success = await send_outreach_email(
                                 to_email=str(db_item.email),
-                                to_name=db_item.full_name or "there",
-                                business_name=db_item.business_name,
-                                business_type=db_item.business_type,
+                                to_name=str(db_item.full_name) if db_item.full_name else "there",
+                                business_name=str(db_item.business_name) if db_item.business_name else None,
+                                business_type=str(db_item.business_type) if db_item.business_type else None,
                                 lead_id=str(db_item.id)
                             )
                             
                             # Re-fetch item to update status
                             db_item = db_update.query(Lead).filter(Lead.id == lead_id).first()
                             if db_item:
-                                db_item.status = "called" if success else "failed"
+                                db_item.status = "called" if success else "failed"  # type: ignore
                                 db_update.commit()
+                            
+                            from app.core.scheduler import scheduler
+                            scheduler.record_email_sent()
                             logger.info("Email outreach complete for lead", lead_id=str(lead_id), success=success)
                         else:
-                            db_item.status = "failed"
-                            db_item.internal_notes = "Skipped: Lead has no email address."
+                            db_item.status = "failed"  # type: ignore
+                            db_item.internal_notes = "Skipped: Lead has no email address."  # type: ignore
                             db_update.commit()
                             logger.warning("Lead skipped: no email", lead_id=str(lead_id))
                 except Exception as update_err:
@@ -171,8 +194,9 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 finally:
                     db_update.close()
                 
-                # Small delay to keep event loop alive and stagger sends
-                await asyncio.sleep(1.0)
+                # 45-second delay between emails (Gmail rate limit protection)
+                logger.info("Enforcing 45-second stagger delay between email sends...")
+                await asyncio.sleep(45)
             else:
                 # Place outbound call
                 logger.info("Placing outbound call for lead", campaign_id=str(campaign_id), lead_id=str(lead_id))

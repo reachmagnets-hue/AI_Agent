@@ -295,16 +295,25 @@ async def retell_webhook(
     # ─── CALL ENDED ───
     elif event == "call_ended":
         duration = call_data.get("duration_ms", 0) // 1000
+        disconnection_reason = call_data.get("disconnection_reason", "")
         update_call_duration(call_id, duration)
         if lead_id:
-            update_lead_status(lead_id, "called")
+            if disconnection_reason in ["voicemail_reached", "machine_detected", "voicemail"]:
+                logger.info("Retell call ended: Voicemail detected - auto-disconnected", call_id=call_id, lead_id=lead_id)
+                update_lead_status(lead_id, "voicemail")
+            else:
+                update_lead_status(lead_id, "called")
     
     # ─── CALL ANALYZED (most important) ───  
     elif event == "call_analyzed":
         analysis = call_data.get("call_analysis", {})
         custom = analysis.get("custom_analysis_data", {})
+        disconnection_reason = call_data.get("disconnection_reason", "")
         
         outcome = custom.get("outcome", "unknown")
+        if disconnection_reason in ["voicemail_reached", "machine_detected", "voicemail"]:
+            outcome = "voicemail"
+            
         prospect_name = custom.get("prospect_name", "")
         business = custom.get("business_name", "")
         services = custom.get("services_interested", "")
@@ -359,7 +368,8 @@ async def retell_webhook(
             business=business,
             services=services,
             meeting_dt=meeting_dt,
-            summary=summary
+            summary=summary,
+            call_id=call_id
         )
     
     return {"status": "received"}
@@ -373,9 +383,31 @@ async def notify_rm_team(prospect_name: str, business: str, meeting_dt: str, ser
 async def handle_post_call_actions(
     outcome, lead_id, prospect_name, 
     prospect_phone, business, services,
-    meeting_dt, summary
+    meeting_dt, summary, call_id=None
 ):
-    """Fires SMS + Email + WhatsApp after call"""
+    """Fires SMS + Email + WhatsApp after call, gated by talk duration"""
+    # 0. Check Call Duration Gating for SMS sending
+    duration = 0
+    if call_id:
+        db_duration = SessionLocal()
+        try:
+            from app.models.call import Call
+            call_record = db_duration.query(Call).filter(Call.retell_call_id == call_id).first()
+            if call_record and call_record.duration_seconds:
+                duration = call_record.duration_seconds
+        except Exception as dur_err:
+            logger.error("Error retrieving call duration for gating", error=str(dur_err))
+        finally:
+            db_duration.close()
+
+    logger.info("Post-call gating check", call_id=call_id, duration_seconds=duration)
+    # Gating check: SMS follow-up is only triggered if talk time is >= 15 seconds
+    if duration < 15:
+        logger.info("Call duration is less than 15 seconds. Skipping automated outreach SMS follow-ups.", call_id=call_id, duration=duration)
+        # Note: If they booked a meeting mid-call, we still allow email booking link, but skip SMS
+        if outcome not in ["meeting_booked", "interested_callback"]:
+            return
+
     from app.core.config import get_settings
     settings = get_settings()
     prospect_email = None
@@ -431,7 +463,7 @@ async def handle_post_call_actions(
                 </body>
                 </html>
                 """
-                await send_smtp_email_direct(str(prospect_email), subject, html_content)
+                await send_smtp_email_direct(str(prospect_email), subject, html_content, lead_id=str(lead_id) if lead_id else None)
             except Exception as e:
                 print(f"Error sending SMTP booking link email: {e}")
         

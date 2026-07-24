@@ -16,7 +16,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import structlog
 
-from app.routers import campaigns, calls, webhooks, leads, appointments, retell_webhook, linkedin, emails
+from app.routers import campaigns, calls, webhooks, leads, appointments, retell_webhook, linkedin, emails, extraction
 from app.core.config import get_settings
 from app.utils.logging import get_logger
 from app.core.scheduler import scheduler
@@ -135,6 +135,7 @@ app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(appointments.router, prefix="/api/v1", tags=["appointments"])
 app.include_router(linkedin.router, prefix="/api/v1", tags=["linkedin"])
 app.include_router(emails.router, prefix="/api/v1", tags=["emails"])
+app.include_router(extraction.router)
 app.include_router(retell_webhook.router)
 
 
@@ -241,6 +242,20 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 from app.core.websocket import websocket_manager
+
+@app.get("/api/v1/scheduler/status", tags=["Scheduler"])
+async def get_scheduler_status():
+    """Retrieve 24-hour master autonomous scheduler operational status"""
+    from app.core.scheduler import scheduler
+    return scheduler.get_status()
+
+@app.post("/api/v1/scheduler/trigger-extraction", tags=["Scheduler"])
+async def trigger_extraction_manual(location: str = "Denver, CO"):
+    """Manually trigger scheduled multi-location extraction"""
+    from app.core.scheduler import scheduler
+    import asyncio
+    asyncio.create_task(scheduler.run_scheduled_extraction(location))
+    return {"status": "success", "message": f"Manual extraction triggered for location: {location}"}
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket):

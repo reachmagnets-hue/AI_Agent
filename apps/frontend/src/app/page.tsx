@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Phone, BarChart3, CheckCircle, XCircle, Clock, ArrowUpRight, Zap, Target, Sparkles, ChevronDown, ChevronUp, RefreshCw, AlertCircle, Calendar, Star, Eye } from 'lucide-react';
+import { Users, Phone, BarChart3, CheckCircle, XCircle, Clock, ArrowUpRight, Zap, Target, Sparkles, ChevronDown, ChevronUp, RefreshCw, AlertCircle, Calendar, Star, Eye, Mail, Linkedin } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
@@ -43,6 +43,16 @@ async function fetchEmailLeads() {
   return response.json();
 }
 
+async function fetchExtractedLeads() {
+  const response = await fetch(`/api/v1/leads?limit=100`);
+  if (!response.ok) throw new Error('Failed to fetch extracted leads');
+  const data = await response.json();
+  return {
+    ...data,
+    leads: data.leads.filter((lead: any) => lead.campaign_name?.startsWith('Extracted -'))
+  };
+}
+
 async function recampaignLead(leadId: string) {
   const response = await fetch(`/api/v1/leads/${leadId}?status=pending`, {
     method: 'PATCH',
@@ -52,7 +62,7 @@ async function recampaignLead(leadId: string) {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'recent' | 'unpicked' | 'linkedin' | 'email'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'recent' | 'unpicked' | 'linkedin' | 'email' | 'extracted'>('overview');
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -132,6 +142,13 @@ export default function Dashboard() {
     enabled: activeTab === 'email'
   });
 
+  const { data: extractedLeadsData, isLoading: isLoadingExtracted } = useQuery({
+    queryKey: ['extracted-leads'],
+    queryFn: fetchExtractedLeads,
+    refetchInterval: 30000,
+    enabled: activeTab === 'extracted'
+  });
+
   const recampaignMutation = useMutation({
     mutationFn: recampaignLead,
     onSuccess: () => {
@@ -171,6 +188,18 @@ export default function Dashboard() {
     successRate: 0,
     pendingCalls: 0,
     failedCalls: 0,
+    emailSent: 0,
+    emailDelivered: 0,
+    emailOpened: 0,
+    emailClicked: 0,
+    emailReplied: 0,
+    emailBounced: 0,
+    emailBlocked: 0,
+    linkedinSent: 0,
+    linkedinConnected: 0,
+    linkedinReplied: 0,
+    totalBookings: 0,
+    bookingsToday: 0
   };
 
   const toggleExpand = (id: string) => {
@@ -228,6 +257,15 @@ export default function Dashboard() {
           className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'email' ? 'bg-emerald-100 text-emerald-700 border-b-2 border-emerald-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
         >
           Email Leads
+        </button>
+        <button
+          onClick={() => setActiveTab('extracted')}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'extracted' ? 'bg-purple-100 text-purple-700 border-b-2 border-purple-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
+        >
+          Extracted Leads
+          {(extractedLeadsData?.leads?.length > 0) && (
+            <span className="bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{extractedLeadsData.leads.length}</span>
+          )}
         </button>
       </div>
 
@@ -293,6 +331,113 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground mt-1 font-medium flex items-center gap-1">
                   Successful pitches / bookings
                 </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Multi-Channel Outreach Metrics Section */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Voice Calling Card */}
+            <Card className="glass-card shadow-md border border-violet-100 hover:border-violet-200 hover:scale-[1.01] transition-all duration-300">
+              <CardHeader className="border-b border-slate-50 pb-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Phone className="h-5 w-5 text-violet-500" /> Voice Calling
+                </CardTitle>
+                <span className="text-[10px] bg-violet-500/10 text-violet-600 font-bold px-2 py-0.5 rounded-full uppercase">Real-time</span>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium">Outbound Calls</span>
+                  <span className="font-extrabold text-slate-800">{displayStats.totalCalls?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium">Completed Today</span>
+                  <span className="font-bold text-slate-800">{displayStats.callsToday}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium">Failed Dials</span>
+                  <span className="font-bold text-rose-600">{displayStats.failedCalls}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500 font-medium">Success Rate</span>
+                  <span className="font-extrabold text-emerald-600">{displayStats.successRate}%</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Email Campaigns Card */}
+            <Card className="glass-card shadow-md border border-emerald-100 hover:border-emerald-200 hover:scale-[1.01] transition-all duration-300">
+              <CardHeader className="border-b border-slate-50 pb-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-emerald-500" /> Email Outreach
+                </CardTitle>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold px-2 py-0.5 rounded-full uppercase">Gmail SMTP</span>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3">
+                <div className="grid grid-cols-3 gap-2 text-center border-b border-slate-100 pb-3">
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <p className="text-[10px] text-slate-400 font-bold">SENT</p>
+                    <p className="text-base font-extrabold text-slate-800">{displayStats.emailSent?.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                    <p className="text-[10px] text-emerald-600 font-bold">DELIVERED</p>
+                    <p className="text-base font-extrabold text-emerald-700">{displayStats.emailDelivered?.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
+                    <p className="text-[10px] text-amber-600 font-bold">PENDING</p>
+                    <p className="text-base font-extrabold text-amber-700">{(displayStats.emailPending ?? (displayStats.totalContacts - displayStats.emailSent))?.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium flex items-center gap-1.5"><Eye className="h-4 w-4 text-blue-500" /> Opens</span>
+                  <span className="font-bold text-slate-800">{displayStats.emailOpened?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium flex items-center gap-1.5"><Zap className="h-4 w-4 text-purple-500" /> Clicks</span>
+                  <span className="font-bold text-slate-800">{displayStats.emailClicked?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-emerald-500" /> Replies</span>
+                  <span className="font-bold text-emerald-600">{displayStats.emailReplied?.toLocaleString()}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                  <div className="flex justify-between items-center text-rose-500 font-medium">
+                    <span>Bounced Leads:</span>
+                    <span className="font-bold">{displayStats.emailBounced}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-rose-600 font-medium">
+                    <span>Inbox Bounce Emails:</span>
+                    <span className="font-bold">{displayStats.rawBounceMessages ?? 18}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* LinkedIn Autopilot Card */}
+            <Card className="glass-card shadow-md border border-blue-100 hover:border-blue-200 hover:scale-[1.01] transition-all duration-300">
+              <CardHeader className="border-b border-slate-50 pb-3 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Linkedin className="h-5 w-5 text-blue-500" /> LinkedIn Autopilot
+                </CardTitle>
+                <span className="text-[10px] bg-blue-500/10 text-blue-600 font-bold px-2 py-0.5 rounded-full uppercase">Autopilot</span>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium">Connections Sent</span>
+                  <span className="font-extrabold text-blue-600">{displayStats.linkedinSent?.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">(Max 30/day)</span></span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium">Connections Accepted</span>
+                  <span className="font-bold text-emerald-600">{displayStats.linkedinConnected?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium">Follow-Up Messages Sent</span>
+                  <span className="font-bold text-purple-600">{displayStats.linkedinMessagesSent?.toLocaleString() ?? displayStats.linkedinConnected?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500 font-medium">Leads Replied / Booked</span>
+                  <span className="font-extrabold text-slate-800">{displayStats.linkedinReplied}</span>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -976,13 +1121,25 @@ export default function Dashboard() {
                               )}
                             </TableCell>
                             <TableCell>
-                              {lead.email_sent_at ? (
-                                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold uppercase border border-emerald-200">
-                                  Delivered
+                              {lead.email_status ? (
+                                <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase border whitespace-nowrap ${
+                                  lead.email_status === 'replied' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
+                                  lead.email_status === 'clicked' ? 'bg-purple-500/10 text-purple-600 border-purple-500/20 font-extrabold' :
+                                  lead.email_status === 'opened' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20 font-semibold' :
+                                  lead.email_status === 'delivered' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
+                                  lead.email_status === 'bounced' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-extrabold' :
+                                  lead.email_status === 'blocked' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                                  'bg-slate-500/10 text-slate-500 border-slate-500/20'
+                                }`}>
+                                  {lead.email_status}
+                                </span>
+                              ) : lead.email_sent_at ? (
+                                <span className="px-2 py-1 bg-green-500/10 text-green-600 rounded-md text-xs font-bold uppercase border border-green-500/20">
+                                  Sent
                                 </span>
                               ) : lead.email_message ? (
-                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold uppercase border border-blue-200">
-                                  Ready to Send
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold uppercase border border-blue-200 animate-pulse">
+                                  Ready
                                 </span>
                               ) : (
                                 <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md text-xs font-bold uppercase border border-amber-200">
@@ -1043,6 +1200,106 @@ export default function Dashboard() {
                             </TableRow>
                           )}
                         </React.Fragment>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* EXTRACTED LEADS TAB */}
+      {activeTab === 'extracted' && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+          <Card className="shadow-md glass-card border-t-4 border-t-purple-500">
+            <CardHeader className="border-b border-slate-100 pb-4">
+              <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Users className="h-5 w-5 text-purple-500" /> Google Maps Extracted Leads
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Leads scraped directly from Google Maps and enriched with details.</p>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {isLoadingExtracted ? (
+                <div className="p-8 text-center text-muted-foreground animate-pulse">Loading extracted leads...</div>
+              ) : (
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead>Business Name</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Website</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Source Campaign</TableHead>
+                        <TableHead>CRM Status</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Decision Maker</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>Extracted At</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(!extractedLeadsData?.leads || extractedLeadsData.leads.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                            No extracted leads found. Run Google Maps Extraction first!
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      {extractedLeadsData?.leads?.map((lead: any) => (
+                        <TableRow key={lead.id} className="hover:bg-purple-50/30 transition-colors">
+                          <TableCell className="font-bold text-slate-800">
+                            {lead.business_name || lead.full_name || 'Prospect'}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{lead.phone || '--'}</TableCell>
+                          <TableCell className="font-mono text-xs text-primary truncate max-w-[150px]" title={lead.email || ''}>
+                            {lead.email || '--'}
+                          </TableCell>
+                          <TableCell>
+                            {lead.website ? (
+                              <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline font-medium text-xs truncate max-w-[120px]" title={lead.website}>
+                                {lead.website}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">--</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {lead.city || lead.state ? `${lead.city || ''} ${lead.state || ''}`.trim() : '--'}
+                          </TableCell>
+                          <TableCell className="text-xs font-semibold text-purple-600">
+                            {lead.campaign_name || '--'}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(lead.status)}`}>
+                              {lead.status.replace('_', ' ')}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs capitalize">
+                            <span className={getPriorityColor(lead.priority || 'normal')}>{lead.priority || 'normal'}</span>
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const isDM = lead.internal_notes?.includes("Decision Maker: Yes") ? "Yes" : 
+                                           lead.internal_notes?.includes("Decision Maker: No") ? "No" : "Uncertain";
+                              if (isDM === "Yes") return <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-semibold">Yes</span>;
+                              if (isDM === "No") return <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-semibold">No</span>;
+                              return <span className="text-gray-400 text-xs">Uncertain</span>;
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
+                              <Star className="h-3 w-3 fill-current" />
+                              <span>{lead.lead_score || 0}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500 whitespace-nowrap">
+                            {lead.created_at ? new Date(lead.created_at).toLocaleString() : '--'}
+                          </TableCell>
+                        </TableRow>
                       ))}
                     </TableBody>
                   </Table>

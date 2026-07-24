@@ -32,6 +32,7 @@ export default function LinkedInCampaigns() {
   const [dailyLimit, setDailyLimit] = useState<number>(100);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' | null }>({ text: '', type: null });
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [simulate, setSimulate] = useState<boolean>(true);
   
   // Autopilot States
   const [activeTab, setActiveTab] = useState<'autopilot' | 'manual'>('autopilot');
@@ -122,7 +123,7 @@ export default function LinkedInCampaigns() {
 
   const startOutreachMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/v1/linkedin/start-campaign?campaign_id=${selectedCampaignId}&limit=${dailyLimit}`, {
+      const response = await fetch(`/api/v1/linkedin/start-campaign?campaign_id=${selectedCampaignId}&limit=${dailyLimit}&simulate=${simulate}`, {
         method: 'POST'
       });
       if (!response.ok) {
@@ -488,6 +489,19 @@ export default function LinkedInCampaigns() {
                         </div>
                       )}
                       
+                      <div className="flex items-center gap-2 mb-2 bg-slate-50 border border-slate-100 p-2 rounded-md">
+                        <input
+                          type="checkbox"
+                          id="force-simulate"
+                          checked={simulate}
+                          onChange={(e) => setSimulate(e.target.checked)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+                        />
+                        <label htmlFor="force-simulate" className="text-xs text-slate-600 font-semibold select-none cursor-pointer">
+                          Demo Sandbox Mode (Simulate Acceptance & Message Delivery Live)
+                        </label>
+                      </div>
+
                       <Button 
                         onClick={() => startOutreachMutation.mutate()} 
                         disabled={startOutreachMutation.isPending || !selectedCampaignId || stats?.ready_to_send === 0}

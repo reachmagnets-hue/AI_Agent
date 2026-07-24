@@ -221,6 +221,40 @@ export default function LeadDetailPage() {
                 </div>
               </div>
 
+              {/* Social Media Profiles Section */}
+              {(lead.facebook_url || lead.instagram_url || lead.linkedin_url || lead.twitter_url || lead.youtube_url) && (
+                <div className="space-y-2 pt-2 border-t border-muted-foreground/10">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Social Media Profiles</label>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {lead.facebook_url && (
+                      <a href={lead.facebook_url} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 rounded-md text-xs font-bold transition-colors flex items-center gap-1">
+                        📘 Facebook
+                      </a>
+                    )}
+                    {lead.instagram_url && (
+                      <a href={lead.instagram_url} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-pink-500/10 text-pink-500 hover:bg-pink-500/20 rounded-md text-xs font-bold transition-colors flex items-center gap-1">
+                        📷 Instagram
+                      </a>
+                    )}
+                    {lead.linkedin_url && (
+                      <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 rounded-md text-xs font-bold transition-colors flex items-center gap-1">
+                        💼 LinkedIn
+                      </a>
+                    )}
+                    {lead.twitter_url && (
+                      <a href={lead.twitter_url} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-slate-500/10 text-slate-300 hover:bg-slate-500/20 rounded-md text-xs font-bold transition-colors flex items-center gap-1">
+                        𝕏 Twitter / X
+                      </a>
+                    )}
+                    {lead.youtube_url && (
+                      <a href={lead.youtube_url} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-md text-xs font-bold transition-colors flex items-center gap-1">
+                        ▶️ YouTube
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {lead.is_dnc && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded flex gap-2 items-center">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />

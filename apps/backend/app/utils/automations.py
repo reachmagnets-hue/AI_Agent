@@ -32,14 +32,14 @@ import asyncio
 SMTP_LOCK: Optional[asyncio.Lock] = None
 
 async def send_smtp_email_direct(to_email: str, subject: str, html_content: str, lead_id: Optional[str] = None) -> bool:
-    """Send standard email via secure SMTP client connection"""
+    """Send standard email via secure SMTP client connection (Hostinger, Gmail, or Custom SMTP)"""
     global SMTP_LOCK
     if SMTP_LOCK is None:
         SMTP_LOCK = asyncio.Lock()
 
     settings = get_settings()
-    host = settings.SMTP_HOST
-    port = settings.SMTP_PORT
+    host = settings.SMTP_HOST or "smtp.hostinger.com"
+    port = int(settings.SMTP_PORT or 465)
     user = settings.SMTP_USER
     password = settings.SMTP_PASSWORD
     sender = settings.SENDER_EMAIL or user or ""
@@ -57,6 +57,28 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
     from datetime import datetime, timezone
     msg_id = f"<{uuid.uuid4()}@reachmagnets.com>"
 
+    # Inject tracking pixel and rewrite links if lead_id is provided
+    if lead_id and settings.BASE_URL:
+        base_url = settings.BASE_URL.rstrip("/")
+        # Tracking open pixel
+        pixel_url = f"{base_url}/api/v1/emails/track/open/{lead_id}"
+        pixel_html = f'<img src="{pixel_url}" width="1" height="1" style="display:none !important;" />'
+        if "</body>" in html_content:
+            html_content = html_content.replace("</body>", f"{pixel_html}</body>")
+        else:
+            html_content += pixel_html
+
+        # Tracking click link rewriter
+        import re
+        from urllib.parse import quote
+        def repl(match):
+            url = match.group(2)
+            if url.startswith(("http://", "https://")) and "track/click" not in url:
+                return f'{match.group(1)}="{base_url}/api/v1/emails/track/click/{lead_id}?url={quote(url)}"'
+            return match.group(0)
+        
+        html_content = re.sub(r'(href)\s*=\s*["\']([^"\']+)["\']', repl, html_content)
+
     async with SMTP_LOCK:
         try:
             msg = MIMEMultipart("alternative")
@@ -68,10 +90,15 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
             msg.attach(MIMEText(html_content, "html"))
 
             def sync_send():
-                with smtplib.SMTP(host, port, timeout=10) as server:
-                    server.starttls()
-                    server.login(user, password)
-                    server.sendmail(sender, to_email, msg.as_string())
+                if port == 465:
+                    with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+                        server.login(user, password)
+                        server.sendmail(sender, to_email, msg.as_string())
+                else:
+                    with smtplib.SMTP(host, port, timeout=15) as server:
+                        server.starttls()
+                        server.login(user, password)
+                        server.sendmail(sender, to_email, msg.as_string())
 
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, sync_send)
@@ -80,36 +107,36 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
             if lead_id:
                 from app.core.database import SessionLocal
                 from app.models.lead import Lead
+                from uuid import UUID
                 db = SessionLocal()
                 try:
-                    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+                    lead = db.query(Lead).filter(Lead.id == UUID(lead_id)).first()
                     if lead:
-                        lead.email_msg_id = msg_id
-                        lead.email_status = "sent"
-                        lead.email_sent_at = datetime.now(timezone.utc)
+                        now_utc = datetime.now(timezone.utc)
+                        lead.email_msg_id = msg_id  # type: ignore
+                        lead.email_sent_at = now_utc  # type: ignore
+                        if not lead.email_delivered_at:
+                            lead.email_delivered_at = now_utc  # type: ignore
+                        if lead.email_status not in ["opened", "clicked", "replied", "bounced", "blocked"]:
+                            lead.email_status = "delivered"  # type: ignore
                         db.commit()
                 except Exception as db_err:
                     logger.error("Failed to update lead message ID in database", error=str(db_err))
                 finally:
                     db.close()
 
-            # Stagger emails by 45 seconds to prevent Gmail anti-bot suspension
+            # Stagger emails by 45 seconds (Gmail rate limit protection)
             logger.info("Enforcing 45-second stagger delay before next SMTP dispatch...")
             await asyncio.sleep(45)
             return True
         except Exception as e:
             logger.error("Failed to send email via SMTP", error=str(e))
-            # Minimal cool down sleep after error
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
             return False
 
 
 async def send_appointment_email(to_email: str, to_name: str, appointment_details: str) -> bool:
-    """Send appointment confirmation details via chosen Email Provider (Brevo or SMTP)"""
-    settings = get_settings()
-    sender_email = settings.SENDER_EMAIL
-    sender_name = settings.SENDER_NAME
-
+    """Send appointment confirmation details via SMTP"""
     html_content = f"""
     <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -120,68 +147,14 @@ async def send_appointment_email(to_email: str, to_name: str, appointment_detail
                 <p style="margin: 0;"><strong>Details:</strong></p>
                 <p style="margin: 5px 0 0 0;">{appointment_details}</p>
             </div>
-            <p>If you need to reschedule or have any questions, feel free to reply directly to this email or connect with us on WhatsApp.</p>
+            <p>If you need to reschedule or have any questions, feel free to reply directly to this email.</p>
             <br>
             <p>Best regards,</p>
             <p><strong>Reach Magnets Team</strong></p>
         </body>
     </html>
     """
-
-    if settings.EMAIL_PROVIDER == "smtp":
-        return await send_smtp_email_direct(to_email, "Your Reach Magnets Appointment Details", html_content)
-
-    api_key = settings.BREVO_API_KEY
-    logger.info("Triggering Brevo appointment email", to_email=to_email, to_name=to_name)
-
-    if not BREVO_AVAILABLE or not api_key or api_key == "your_brevo_api_key":
-        logger.warning("Brevo email not configured. Mocking email delivery.")
-        return True
-
-    try:
-        # Configure API key authorization
-        configuration = sib_api_v3_sdk.Configuration()
-        configuration.api_key['api-key'] = api_key
-
-        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
-        
-        sender = {"name": sender_name, "email": sender_email}
-        to = [{"email": to_email, "name": to_name}]
-        
-        html_content = f"""
-        <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="color: #6C5DD3;">Reach Magnets - Appointment Scheduled 📅</h2>
-                <p>Hello <strong>{to_name}</strong>,</p>
-                <p>We are excited to confirm your upcoming appointment with Reach Magnets!</p>
-                <div style="background-color: #f7f7f7; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                    <p style="margin: 0;"><strong>Details:</strong></p>
-                    <p style="margin: 5px 0 0 0;">{appointment_details}</p>
-                </div>
-                <p>If you need to reschedule or have any questions, feel free to reply directly to this email or connect with us on WhatsApp.</p>
-                <br>
-                <p>Best regards,</p>
-                <p><strong>Reach Magnets Team</strong></p>
-            </body>
-        </html>
-        """
-        
-        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-            sender=sender,
-            to=to,
-            subject="Your Reach Magnets Appointment Details",
-            html_content=html_content
-        )
-
-        api_response = api_instance.send_transac_email(send_smtp_email)
-        logger.info("Brevo email sent successfully", message_id=getattr(api_response, "message_id", "unknown"))
-        return True
-    except ApiException as e:
-        logger.error("Exception when calling TransactionalEmailsApi->send_transac_email", error=str(e))
-        return False
-    except Exception as e:
-        logger.error("Error sending Brevo email", error=str(e))
-        return False
+    return await send_smtp_email_direct(to_email, "Your Reach Magnets Appointment Details", html_content)
 
 
 async def send_appointment_sms(to_phone: str, to_name: str, appointment_details: str) -> bool:
@@ -384,67 +357,9 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
 
 
 async def send_outreach_email(to_email: str, to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None, lead_id: Optional[str] = None) -> bool:
-    """Send initial approach/outreach email introducing services via chosen Email Provider (Brevo or SMTP)"""
-    settings = get_settings()
-    sender_email = settings.SENDER_EMAIL
-    sender_name = settings.SENDER_NAME
-
+    """Send initial approach/outreach email introducing services via SMTP"""
     subject, html_content = render_outreach_email(to_name, business_name, business_type)
-
-    if settings.EMAIL_PROVIDER == "smtp":
-        return await send_smtp_email_direct(to_email, subject, html_content, lead_id=lead_id)
-
-    api_key = settings.BREVO_API_KEY
-    logger.info("Triggering Brevo outreach email", to_email=to_email, to_name=to_name)
-
-    if not BREVO_AVAILABLE or not api_key or api_key == "your_brevo_api_key":
-        logger.warning("Brevo email not configured. Mocking outreach email delivery.")
-        return True
-
-    try:
-        configuration = sib_api_v3_sdk.Configuration()
-        configuration.api_key['api-key'] = api_key
-
-        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
-        
-        sender = {"name": sender_name, "email": sender_email}
-        to = [{"email": to_email, "name": to_name}]
-        
-        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-            sender=sender,
-            to=to,
-            subject=subject,
-            html_content=html_content
-        )
-
-        api_response = api_instance.send_transac_email(send_smtp_email)
-        msg_id = getattr(api_response, "message_id", "unknown")
-        logger.info("Brevo outreach email sent successfully", message_id=msg_id)
-
-        if lead_id and msg_id != "unknown":
-            from app.core.database import SessionLocal
-            from app.models.lead import Lead
-            from datetime import datetime, timezone
-            db = SessionLocal()
-            try:
-                lead = db.query(Lead).filter(Lead.id == lead_id).first()
-                if lead:
-                    lead.email_msg_id = msg_id
-                    lead.email_status = "sent"
-                    lead.email_sent_at = datetime.now(timezone.utc)
-                    db.commit()
-            except Exception as db_err:
-                logger.error("Failed to update lead message ID from Brevo API", error=str(db_err))
-            finally:
-                db.close()
-
-        return True
-    except ApiException as e:
-        logger.error("Exception when calling TransactionalEmailsApi->send_transac_email for outreach", error=str(e))
-        return False
-    except Exception as e:
-        logger.error("Error sending Brevo outreach email", error=str(e))
-        return False
+    return await send_smtp_email_direct(to_email, subject, html_content, lead_id=lead_id)
 
 
 async def send_outreach_sms(to_phone: str, to_name: str, business_name: Optional[str] = None) -> bool:

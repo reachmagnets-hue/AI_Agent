@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Search, Plus, Filter, Upload, AlertCircle, Eye, Star, Sparkles, X, Loader2, FileImage } from 'lucide-react';
+import { Users, Search, Plus, Filter, Upload, AlertCircle, Eye, Star, Sparkles, X, Loader2, FileImage, Download } from 'lucide-react';
 
 async function fetchLeads({ search, status, priority, page, leadTab }: { search: string; status: string; priority: string; page: number; leadTab: string }) {
   let url = `/api/v1/leads/?page=${page}&limit=15`;
@@ -19,6 +19,8 @@ async function fetchLeads({ search, status, priority, page, leadTab }: { search:
     url += '&has_email=true';
   } else if (leadTab === 'linkedin') {
     url += '&has_linkedin=true';
+  } else if (leadTab === 'social') {
+    url += '&has_social=true';
   } else if (leadTab === 'phone') {
     url += '&has_phone=true';
   }
@@ -52,6 +54,27 @@ export default function LeadsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
+  const handleExportCSV = () => {
+    let url = `/api/v1/leads/export/csv?`;
+    const params = [];
+    if (search) params.push(`search=${encodeURIComponent(search)}`);
+    if (status && status !== 'all') params.push(`status=${status}`);
+    if (priority && priority !== 'all') params.push(`priority=${priority}`);
+    
+    if (leadTab === 'email') {
+      params.push('has_email=true');
+    } else if (leadTab === 'linkedin') {
+      params.push('has_linkedin=true');
+    } else if (leadTab === 'social') {
+      params.push('has_social=true');
+    } else if (leadTab === 'phone') {
+      params.push('has_phone=true');
+    }
+    
+    url += params.join('&');
+    window.open(url, '_blank');
+  };
+
   // AI Screenshot Extraction State
   interface QueueItem {
     id: string;
@@ -66,7 +89,7 @@ export default function LeadsPage() {
   const [screenshotQueue, setScreenshotQueue] = useState<QueueItem[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [leadTab, setLeadTab] = useState<'all' | 'phone' | 'email' | 'linkedin'>('all');
+  const [leadTab, setLeadTab] = useState<'all' | 'phone' | 'email' | 'linkedin' | 'social'>('all');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -515,7 +538,7 @@ export default function LeadsPage() {
 
       {/* Subsections/Tabs */}
       <div className="flex space-x-2 border-b border-muted-foreground/10 pb-2">
-        {(['all', 'phone', 'email', 'linkedin'] as const).map((tab) => (
+        {(['all', 'phone', 'email', 'linkedin', 'social'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => { setLeadTab(tab); setPage(1); }}
@@ -576,6 +599,14 @@ export default function LeadsPage() {
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
               </select>
+
+              <Button
+                variant="outline"
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 bg-background font-bold text-xs h-[38px] hover:bg-muted/10 transition-colors"
+              >
+                <Download className="h-4 w-4" /> Export CSV
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -600,7 +631,7 @@ export default function LeadsPage() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Email Status</TableHead>
-                    <TableHead>LinkedIn</TableHead>
+                    <TableHead>Social Media Profiles</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>LI Status</TableHead>
                     <TableHead>Priority</TableHead>
@@ -664,13 +695,54 @@ export default function LeadsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {lead.linkedin_url ? (
-                          <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-500 hover:underline font-medium text-xs truncate max-w-[120px]" title={lead.linkedin_url}>
-                            View Profile
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">--</span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1 min-w-[130px]">
+                          {lead.facebook_url && (
+                            <a href={lead.facebook_url} target="_blank" rel="noopener noreferrer" title={`Facebook: ${lead.facebook_url}`} className="p-1 rounded bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 text-xs font-bold transition-colors">
+                              📘 FB
+                            </a>
+                          )}
+                          {lead.instagram_url && (
+                            <a href={lead.instagram_url} target="_blank" rel="noopener noreferrer" title={`Instagram: ${lead.instagram_url}`} className="p-1 rounded bg-pink-500/10 text-pink-600 hover:bg-pink-500/20 text-xs font-bold transition-colors">
+                              📷 IG
+                            </a>
+                          )}
+                          {lead.linkedin_url && (
+                            <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" title={`LinkedIn: ${lead.linkedin_url}`} className="p-1 rounded bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 text-xs font-bold transition-colors">
+                              💼 LI
+                            </a>
+                          )}
+                          {lead.twitter_url && (
+                            <a href={lead.twitter_url} target="_blank" rel="noopener noreferrer" title={`Twitter/X: ${lead.twitter_url}`} className="p-1 rounded bg-slate-500/10 text-slate-700 dark:text-slate-300 hover:bg-slate-500/20 text-xs font-bold transition-colors">
+                              𝕏 TW
+                            </a>
+                          )}
+                          {lead.youtube_url && (
+                            <a href={lead.youtube_url} target="_blank" rel="noopener noreferrer" title={`YouTube: ${lead.youtube_url}`} className="p-1 rounded bg-red-500/10 text-red-600 hover:bg-red-500/20 text-xs font-bold transition-colors">
+                              ▶️ YT
+                            </a>
+                          )}
+                          {(() => {
+                            if (!lead.internal_notes || !lead.internal_notes.includes("[Directories]")) return null;
+                            try {
+                              const raw = lead.internal_notes.split("[Directories]")[1].split("\n")[0];
+                              return raw.split("|").map((item: string, idx: number) => {
+                                const [dName, ...uParts] = item.split(":");
+                                const dUrl = uParts.join(":").trim();
+                                if (!dName || !dUrl.startsWith("http")) return null;
+                                return (
+                                  <a key={idx} href={dUrl} target="_blank" rel="noopener noreferrer" title={`${dName.trim()}: ${dUrl}`} className="p-1 rounded bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 text-xs font-bold transition-colors border border-amber-500/20">
+                                    ⭐ {dName.trim().slice(0, 4)}
+                                  </a>
+                                );
+                              });
+                            } catch (e) {
+                              return null;
+                            }
+                          })()}
+                          {!lead.facebook_url && !lead.instagram_url && !lead.linkedin_url && !lead.twitter_url && !lead.youtube_url && (!lead.internal_notes || !lead.internal_notes.includes("[Directories]")) && (
+                            <span className="text-muted-foreground text-xs">--</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${getStatusColor(lead.status || 'pending')}`}>
