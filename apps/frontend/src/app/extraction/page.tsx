@@ -48,16 +48,12 @@ export default function UnifiedLeadSourcingPage() {
 
   // SECTION 1: Google Maps Scraper Form States
   const [gmapsIndustry, setGmapsIndustry] = useState<string>('automotive');
-  const [gmapsLocation, setGmapsLocation] = useState<string>('Dallas TX');
-  const [gmapsLimit, setGmapsLimit] = useState<number>(10);
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractedLeads, setExtractedLeads] = useState<ExtractedLead[]>([]);
   const [gmapsProgressText, setGmapsProgressText] = useState<string>('');
 
   // SECTION 2: LinkedIn Prospecting Form States
   const [linkedinIndustry, setLinkedinIndustry] = useState<string>('automotive');
-  const [linkedinLocation, setLinkedinLocation] = useState<string>('Texas, USA');
-  const [linkedinLimit, setLinkedinLimit] = useState<number>(10);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [isAutopilotRunning, setIsAutopilotRunning] = useState<boolean>(false);
   const [isSendingTestConnection, setIsSendingTestConnection] = useState<boolean>(false);
@@ -121,7 +117,7 @@ export default function UnifiedLeadSourcingPage() {
         if (data.event === 'extraction_started') {
           setIsExtracting(true);
           setExtractedLeads([]);
-          setGmapsProgressText(`[Google Maps] Searching "${data.industry}" in "${data.location}" (Target: ${data.limit} listings)...`);
+          setGmapsProgressText(`[Google Maps] Scraping industry "${data.industry}" across target locations...`);
           setStatusMessage({ text: 'Google Maps extraction launched in background.', type: 'info' });
         }
         else if (data.event === 'extraction_progress') {
@@ -162,8 +158,8 @@ export default function UnifiedLeadSourcingPage() {
           
           if (data.stage === 'zero_leads') {
             setIsAutopilotRunning(false);
-            setZeroLeadsWarning(`0 leads found for '${linkedinIndustry}' in '${linkedinLocation}'. Please change your location or industry instruction.`);
-            setStatusMessage({ text: `No leads found for '${linkedinIndustry}'. Please update Industry or Location instruction.`, type: 'error' });
+            setZeroLeadsWarning(`0 leads found for Industry instruction '${linkedinIndustry}'. Please update your Industry keyword to find new leads.`);
+            setStatusMessage({ text: `No leads found for Industry '${linkedinIndustry}'. Please update Industry instruction.`, type: 'error' });
           } else if (data.stage === 'completed') {
             setIsAutopilotRunning(false);
             setZeroLeadsWarning(null);
@@ -183,13 +179,13 @@ export default function UnifiedLeadSourcingPage() {
     return () => {
       ws.close();
     };
-  }, [linkedinIndustry, linkedinLocation, refetchStats]);
+  }, [linkedinIndustry, refetchStats]);
 
   // Handle Google Maps Extraction Trigger
   const handleStartGmapsExtraction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!gmapsIndustry.trim() || !gmapsLocation.trim()) {
-      setStatusMessage({ text: 'Please fill out both Industry and Place/Location filters for Google Maps.', type: 'error' });
+    if (!gmapsIndustry.trim()) {
+      setStatusMessage({ text: 'Please enter Industry Instruction for Google Maps.', type: 'error' });
       return;
     }
     
@@ -200,7 +196,7 @@ export default function UnifiedLeadSourcingPage() {
       const response = await fetch(`${API_BASE_URL}/api/v1/extraction/scrape`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ industry: gmapsIndustry, location: gmapsLocation, limit: gmapsLimit })
+        body: JSON.stringify({ industry: gmapsIndustry, location: 'USA', limit: 50 })
       });
       
       if (!response.ok) throw new Error('Failed to initiate scraper task');
@@ -213,20 +209,20 @@ export default function UnifiedLeadSourcingPage() {
   // Handle LinkedIn Autopilot Trigger
   const handleStartLinkedInAutopilot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!linkedinIndustry.trim() || !linkedinLocation.trim()) {
-      setStatusMessage({ text: 'Please enter both Industry Instruction and Place/Location for LinkedIn.', type: 'error' });
+    if (!linkedinIndustry.trim()) {
+      setStatusMessage({ text: 'Please enter Industry Instruction for LinkedIn.', type: 'error' });
       return;
     }
 
     setIsAutopilotRunning(true);
     setZeroLeadsWarning(null);
-    setStatusMessage({ text: `Initializing LinkedIn Autopilot for ${linkedinIndustry} in ${linkedinLocation}...`, type: 'info' });
+    setStatusMessage({ text: `Initializing LinkedIn Autopilot for Industry: ${linkedinIndustry}...`, type: 'info' });
 
     try {
       const params = new URLSearchParams({
         industry: linkedinIndustry,
-        limit: linkedinLimit.toString(),
-        location: linkedinLocation
+        limit: '50',
+        location: 'USA'
       });
       
       const response = await fetch(`/api/v1/linkedin/autopilot?${params.toString()}`, {
@@ -305,7 +301,7 @@ export default function UnifiedLeadSourcingPage() {
             Lead Sourcing & LinkedIn Automation Hub <Zap className="h-8 w-8 text-indigo-600 animate-pulse" />
           </h1>
           <p className="text-muted-foreground mt-1 text-sm font-medium">
-            Dedicated Google Maps Extraction & LinkedIn Automated Prospecting engines on a single control page.
+            Dedicated Google Maps Business Extraction & LinkedIn Prospecting engines powered by automated target location rotation.
           </p>
         </div>
       </div>
@@ -339,8 +335,8 @@ export default function UnifiedLeadSourcingPage() {
           <div className="lg:col-span-1 space-y-4">
             <Card className="glass-card shadow-md border border-slate-200/80">
               <CardHeader className="border-b border-slate-100 pb-3">
-                <CardTitle className="text-base font-bold text-slate-800">Extraction Parameters</CardTitle>
-                <CardDescription className="text-xs">Specify target industry & place for Google Maps scraping.</CardDescription>
+                <CardTitle className="text-base font-bold text-slate-800">Extraction Industry</CardTitle>
+                <CardDescription className="text-xs">Specify target industry instruction for Google Maps scraping.</CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
                 <form onSubmit={handleStartGmapsExtraction} className="space-y-4">
@@ -351,32 +347,6 @@ export default function UnifiedLeadSourcingPage() {
                       onChange={(e) => setGmapsIndustry(e.target.value)}
                       placeholder="e.g. automotive, roofers, dentist"
                       required
-                      disabled={isExtracting}
-                      className="bg-white/90 border-slate-200"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Place / Location</label>
-                    <Input
-                      value={gmapsLocation}
-                      onChange={(e) => setGmapsLocation(e.target.value)}
-                      placeholder="e.g. Dallas TX, Nelamangala"
-                      required
-                      disabled={isExtracting}
-                      className="bg-white/90 border-slate-200"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Max Results</label>
-                    <Input
-                      type="number"
-                      value={gmapsLimit}
-                      onChange={(e) => setGmapsLimit(parseInt(e.target.value) || 10)}
-                      required
-                      min={1}
-                      max={500}
                       disabled={isExtracting}
                       className="bg-white/90 border-slate-200"
                     />
@@ -399,8 +369,8 @@ export default function UnifiedLeadSourcingPage() {
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Live Scraper Progress</CardTitle>
               </CardHeader>
               <CardContent className="pt-3">
-                <div className="text-xs text-slate-200 font-mono bg-slate-900 p-3.5 rounded-xl shadow-inner min-h-[100px] leading-relaxed break-all">
-                  {gmapsProgressText || 'Ready. Fill parameters above and click "Start Google Maps Scrape".'}
+                <div className="text-xs text-slate-200 font-mono bg-slate-900 p-3.5 rounded-xl shadow-inner min-h-[90px] leading-relaxed break-all">
+                  {gmapsProgressText || 'Ready. Enter Industry instruction and click "Start Google Maps Scrape".'}
                 </div>
               </CardContent>
             </Card>
@@ -408,7 +378,7 @@ export default function UnifiedLeadSourcingPage() {
 
           {/* Results Listings */}
           <div className="lg:col-span-2">
-            <Card className="glass-card shadow-md border border-slate-200/60 flex flex-col h-[520px] overflow-hidden">
+            <Card className="glass-card shadow-md border border-slate-200/60 flex flex-col h-[480px] overflow-hidden">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-3">
                 <div className="flex justify-between items-center">
                   <div>
@@ -426,7 +396,7 @@ export default function UnifiedLeadSourcingPage() {
                     <Building2 className="h-12 w-12 mb-3 text-slate-300" />
                     <p className="text-sm font-semibold">No businesses extracted yet</p>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      Specify industry and place instruction on the left to launch extraction.
+                      Specify industry instruction on the left to launch extraction.
                     </p>
                   </div>
                 ) : (
@@ -498,8 +468,8 @@ export default function UnifiedLeadSourcingPage() {
           <div className="lg:col-span-1 space-y-4">
             <Card className="glass-card shadow-md border border-slate-200/80">
               <CardHeader className="border-b border-slate-100 pb-3">
-                <CardTitle className="text-base font-bold text-slate-800">LinkedIn Targeting Parameters</CardTitle>
-                <CardDescription className="text-xs">Specify target industry instruction & place for decision-maker prospecting.</CardDescription>
+                <CardTitle className="text-base font-bold text-slate-800">LinkedIn Target Industry</CardTitle>
+                <CardDescription className="text-xs">Specify target industry instruction for decision-maker prospecting.</CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
                 <form onSubmit={handleStartLinkedInAutopilot} className="space-y-4">
@@ -510,32 +480,6 @@ export default function UnifiedLeadSourcingPage() {
                       onChange={(e) => setLinkedinIndustry(e.target.value)}
                       placeholder="e.g. Automotive, Real Estate, SaaS Founder"
                       required
-                      disabled={isAutopilotRunning}
-                      className="bg-white/90 border-slate-200"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Place / Location</label>
-                    <Input
-                      value={linkedinLocation}
-                      onChange={(e) => setLinkedinLocation(e.target.value)}
-                      placeholder="e.g. Texas USA, Chicago, London"
-                      required
-                      disabled={isAutopilotRunning}
-                      className="bg-white/90 border-slate-200"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Max Prospecting Limit</label>
-                    <Input
-                      type="number"
-                      value={linkedinLimit}
-                      onChange={(e) => setLinkedinLimit(parseInt(e.target.value) || 10)}
-                      required
-                      min={1}
-                      max={100}
                       disabled={isAutopilotRunning}
                       className="bg-white/90 border-slate-200"
                     />
@@ -629,8 +573,8 @@ export default function UnifiedLeadSourcingPage() {
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">LinkedIn Autopilot Real-time Stream</CardTitle>
               </CardHeader>
               <CardContent className="pt-3">
-                <div className="text-xs text-sky-300 font-mono bg-slate-900 p-3.5 rounded-xl shadow-inner min-h-[110px] leading-relaxed break-all">
-                  {autopilotLog || 'No active autopilot run. Fill parameters and click "Launch LinkedIn Autopilot".'}
+                <div className="text-xs text-sky-300 font-mono bg-slate-900 p-3.5 rounded-xl shadow-inner min-h-[100px] leading-relaxed break-all">
+                  {autopilotLog || 'Ready. Enter Industry instruction and click "Launch LinkedIn Autopilot".'}
                 </div>
               </CardContent>
             </Card>

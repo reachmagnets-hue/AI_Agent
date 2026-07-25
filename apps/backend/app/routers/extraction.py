@@ -10,8 +10,8 @@ router = APIRouter(prefix="/api/v1/extraction", tags=["Extraction"])
 
 class ScrapeRequest(BaseModel):
     industry: str
-    location: str
-    limit: int = 10
+    location: str = "USA"
+    limit: int = 50
 
 async def run_scraper_task(industry: str, location: str, limit: int):
     """Background runner for Google Maps scraping that broadcasts progress updates over WebSockets"""
