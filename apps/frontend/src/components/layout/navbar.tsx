@@ -14,8 +14,7 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: BarChart3 },
   { name: 'Call Logs', href: '/calls', icon: Phone },
   { name: 'Appointments', href: '/appointments', icon: Calendar },
-  { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
-  { name: 'Data Extraction', href: '/extraction', icon: MapPin },
+  { name: 'Lead Sourcing & LinkedIn', href: '/extraction', icon: MapPin },
 ];
 
 export function Navbar() {
