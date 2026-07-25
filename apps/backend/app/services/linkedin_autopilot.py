@@ -37,6 +37,16 @@ async def run_linkedin_autopilot(campaign_id: str, industry: str, limit: int, lo
         scraped_count = scrape_res.get("scraped", 0)
         logger.info("Autopilot Step 1 complete: Scraped leads", campaign_id=campaign_id, count=scraped_count)
         
+        if scraped_count == 0:
+            await websocket_manager.broadcast({
+                "event": "autopilot_status",
+                "campaign_id": campaign_id,
+                "stage": "zero_leads",
+                "message": f"0 leads found for '{industry}' in '{location or 'Anywhere'}'. Please change your location or industry instruction."
+            })
+            _update_campaign_status(campaign_id, "paused")
+            return
+
         await websocket_manager.broadcast({
             "event": "autopilot_status",
             "campaign_id": campaign_id,
