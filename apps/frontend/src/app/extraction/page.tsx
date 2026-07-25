@@ -221,7 +221,7 @@ export default function UnifiedLeadSourcingPage() {
     try {
       const params = new URLSearchParams({
         industry: linkedinIndustry,
-        limit: '50',
+        limit: '30',
         location: 'USA'
       });
       

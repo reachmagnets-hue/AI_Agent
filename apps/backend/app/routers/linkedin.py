@@ -94,12 +94,12 @@ async def generate_linkedin_messages_campaign(
 async def start_linkedin_campaign_run(
     campaign_id: UUID,
     background_tasks: BackgroundTasks,
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(30, ge=1, le=30),
     simulate: bool = Query(False, description="Force simulation mode for demo/testing"),
     db: Session = Depends(get_db)
 ):
     """
-    Launch automated Playwright connection invitation & message queue.
+    Launch automated Playwright connection invitation & message queue (capped at max 30 per day).
     """
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
@@ -117,9 +117,9 @@ async def start_linkedin_campaign_run(
     if ready_count == 0:
         raise HTTPException(status_code=400, detail="No leads with generated LinkedIn messages ready to send in this campaign.")
         
-    background_tasks.add_task(send_linkedin_campaign, str(campaign_id), limit, simulate)
+    background_tasks.add_task(send_linkedin_campaign, str(campaign_id), min(limit, 30), simulate)
     
-    return {"message": f"LinkedIn campaign outreach started. Dispatching to {min(ready_count, limit)} leads."}
+    return {"message": f"LinkedIn campaign outreach started. Dispatching to {min(ready_count, limit, 30)} leads (Daily Limit: 30)."}
 
 
 @router.get("/stats")
@@ -138,7 +138,8 @@ def get_linkedin_campaign_stats(campaign_id: UUID, db: Session = Depends(get_db)
         "scraped": scraped,
         "pending_generation": pending_generation,
         "ready_to_send": ready_to_send,
-        "sent": sent
+        "sent": sent,
+        "daily_limit": 30
     }
 
 
@@ -146,7 +147,7 @@ def get_linkedin_campaign_stats(campaign_id: UUID, db: Session = Depends(get_db)
 async def trigger_linkedin_autopilot(
     background_tasks: BackgroundTasks,
     industry: str = Query(...),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(30, ge=1, le=30),
     location: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
