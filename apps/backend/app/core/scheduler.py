@@ -126,7 +126,7 @@ class MasterAutonomousScheduler:
                         self.last_extraction_hour = current_hour
                         
                         logger.info("⏰ Extraction Window Active (1-hr ON). Triggering multi-location extraction...", location=location, hour=current_hour, progress=f"{self.location_index}/{len(TARGET_LOCATIONS)}")
-                        asyncio.create_task(self.run_scheduled_extraction(location))
+                        asyncio.create_task(self.run_scheduled_extraction(location, query="Auto Body Shop"))
                 else:
                     if current_hour != self.last_extraction_hour:
                         self.last_extraction_hour = current_hour

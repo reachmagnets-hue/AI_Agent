@@ -47,13 +47,13 @@ export default function UnifiedLeadSourcingPage() {
   const queryClient = useQueryClient();
 
   // SECTION 1: Google Maps Scraper Form States
-  const [gmapsIndustry, setGmapsIndustry] = useState<string>('automotive');
+  const [gmapsIndustry, setGmapsIndustry] = useState<string>('Auto Body Shop');
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractedLeads, setExtractedLeads] = useState<ExtractedLead[]>([]);
   const [gmapsProgressText, setGmapsProgressText] = useState<string>('');
 
   // SECTION 2: LinkedIn Prospecting Form States
-  const [linkedinIndustry, setLinkedinIndustry] = useState<string>('automotive');
+  const [linkedinIndustry, setLinkedinIndustry] = useState<string>('Auto Body Shop');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [isAutopilotRunning, setIsAutopilotRunning] = useState<boolean>(false);
   const [isSendingTestConnection, setIsSendingTestConnection] = useState<boolean>(false);
