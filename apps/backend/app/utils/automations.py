@@ -38,7 +38,7 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
         SMTP_LOCK = asyncio.Lock()
 
     settings = get_settings()
-    host = settings.SMTP_HOST or "smtp.hostinger.com"
+    host = settings.SMTP_HOST or "smtp.gmail.com"
     port = int(settings.SMTP_PORT or 465)
     user = settings.SMTP_USER
     password = settings.SMTP_PASSWORD
