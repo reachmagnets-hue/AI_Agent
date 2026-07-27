@@ -204,55 +204,10 @@ class MasterAutonomousScheduler:
     async def run_scheduled_extraction(self, location: str, query: str = "Auto Body Shop"):
         """Background worker to extract leads from a location and store in DB with full deduplication"""
         try:
-            from app.services.gmaps_scraper import scrape_google_maps_leads
-            logger.info(f"Starting scheduled extraction: location='{location}', max_results={MAX_LEADS_PER_EXTRACTION}")
-            results = await scrape_google_maps_leads(query=query, location=location, max_results=MAX_LEADS_PER_EXTRACTION)
-            
-            db = SessionLocal()
-            saved_count = 0
-            duplicate_count = 0
-            try:
-                for r in results:
-                    place_id = r.get("place_id")
-                    email = (r.get("email") or "").strip().lower()
-                    phone = (r.get("phone") or "").strip()
-                    
-                    # Strict Deduplication Check
-                    existing = None
-                    if place_id:
-                        existing = db.query(Lead).filter(Lead.place_id == place_id).first()
-                    if not existing and email:
-                        existing = db.query(Lead).filter(Lead.email == email).first()
-                    if not existing and phone:
-                        existing = db.query(Lead).filter(Lead.phone == phone).first()
-                        
-                    if existing:
-                        duplicate_count += 1
-                        continue
-
-                    notes = r.get("internal_notes") or ""
-                    lead = Lead(
-                        business_name=r.get("name") or "Unknown Business",
-                        full_name=f"Manager of {r.get('name') or 'Business'}",
-                        phone=r.get("phone"),
-                        email=r.get("email"),
-                        address=r.get("address"),
-                        city=location.split(",")[0].strip(),
-                        website=r.get("website"),
-                        place_id=r.get("place_id"),
-                        source=f"Automated Extractor ({location})",
-                        status="pending",
-                        internal_notes=notes
-                    )
-                    db.add(lead)
-                    saved_count += 1
-
-                db.commit()
-                logger.info(f"Scheduled extraction complete for {location}! New saved: {saved_count}, Duplicates skipped: {duplicate_count}")
-            except Exception as db_err:
-                logger.error(f"Error saving extracted leads for {location}", error=str(db_err))
-            finally:
-                db.close()
+            from app.services.gmaps_scraper import scrape_gmaps
+            logger.info(f"Starting scheduled extraction: industry='{query}', location='{location}', limit={MAX_LEADS_PER_EXTRACTION}")
+            await scrape_gmaps(industry=query, location=location, limit=MAX_LEADS_PER_EXTRACTION)
+            logger.info(f"Completed scheduled extraction for '{query}' in '{location}'.")
         except Exception as e:
             logger.error(f"Failed to execute scheduled extraction for {location}", error=str(e))
 
