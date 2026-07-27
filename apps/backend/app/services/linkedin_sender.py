@@ -354,7 +354,7 @@ async def process_hourly_linkedin_tasks():
                     if lead.linkedin_status == 'connected' and lead.linkedin_message:
                         msg_btn = await page.query_selector("button:has-text('Message'), a:has-text('Message')")
                         if msg_btn:
-                            await msg_btn.click()
+                            await msg_btn.click(force=True)
                             await asyncio.sleep(2.0)
                             textarea = await page.query_selector("div[role='textbox'], textarea[name='message']")
                             if textarea:
@@ -362,7 +362,7 @@ async def process_hourly_linkedin_tasks():
                                 await asyncio.sleep(1.0)
                                 send_btn = await page.query_selector("button.msg-form__send-button")
                                 if send_btn:
-                                    await send_btn.click()
+                                    await send_btn.click(force=True)
                                     await asyncio.sleep(2.0)
                                     lead.linkedin_status = 'message_sent' # type: ignore
                                     db.commit()
@@ -373,7 +373,7 @@ async def process_hourly_linkedin_tasks():
                     elif lead.linkedin_status == 'message_sent':
                         msg_btn = await page.query_selector("button:has-text('Message'), a:has-text('Message')")
                         if msg_btn:
-                            await msg_btn.click()
+                            await msg_btn.click(force=True)
                             await asyncio.sleep(3.0)
                             
                             # Scrape all paragraphs in the popup message list container
@@ -396,7 +396,7 @@ async def process_hourly_linkedin_tasks():
                                         await asyncio.sleep(1.0)
                                         send_btn = await page.query_selector("button.msg-form__send-button")
                                         if send_btn:
-                                            await send_btn.click()
+                                            await send_btn.click(force=True)
                                             await asyncio.sleep(2.0)
                                             lead.linkedin_status = 'meeting_scheduled' # type: ignore
                                             db.commit()
