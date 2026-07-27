@@ -92,7 +92,13 @@ class MasterAutonomousScheduler:
                 await asyncio.sleep(10)
                 continue
 
-            now_local = datetime.now()
+            try:
+                from zoneinfo import ZoneInfo
+                tz_name = getattr(settings, "TIMEZONE", "Asia/Kolkata") or "Asia/Kolkata"
+                now_local = datetime.now(ZoneInfo(tz_name))
+            except Exception:
+                now_local = datetime.now()
+
             current_weekday = now_local.weekday()  # 0=Mon, 5=Sat, 6=Sun
             current_hour = now_local.hour
             current_minute = now_local.minute
