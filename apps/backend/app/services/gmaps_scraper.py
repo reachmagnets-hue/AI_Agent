@@ -255,76 +255,8 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return previous_row[-1]
 
 def is_valid_location_match(address: str, target_location: str) -> bool:
-    """
-    Verifies that extracted address matches target location if specified.
-    Handles US state abbreviation mappings and fuzzy spelling typos.
-    """
-    if not target_location or not target_location.strip():
-        return True
-    if not address or not address.strip():
-        return True
-        
-    addr_lower = address.lower()
-    
-    # Mapping of US states to their common abbreviations
-    state_abbreviations = {
-        "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar", "california": "ca",
-        "colorado": "co", "connecticut": "ct", "delaware": "de", "florida": "fl", "georgia": "ga",
-        "hawaii": "hi", "idaho": "id", "illinois": "il", "indiana": "in", "iowa": "ia",
-        "kansas": "ks", "kentucky": "ky", "louisiana": "la", "maine": "me", "maryland": "md",
-        "massachusetts": "ma", "michigan": "mi", "minnesota": "mn", "mississippi": "ms",
-        "missouri": "mo", "montana": "mt", "nebraska": "ne", "nevada": "nv", "new hampshire": "nh",
-        "new jersey": "nj", "new mexico": "nm", "new york": "ny", "north carolina": "nc",
-        "north dakota": "nd", "ohio": "oh", "oklahoma": "ok", "oregon": "or", "pennsylvania": "pa",
-        "rhode island": "ri", "south carolina": "sc", "south dakota": "sd", "tennessee": "tn",
-        "texas": "tx", "utah": "ut", "vermont": "vt", "virginia": "va", "washington": "wa",
-        "west virginia": "wv", "wisconsin": "wi", "wyoming": "wy"
-    }
-    
-    stop_words = {"in", "near", "around", "at", "the", "of", "and", "or", "for", "with", "by", "us", "usa"}
-    tokens = [
-        w.strip().lower() 
-        for w in re.split(r'[\s,.:;/-]+', target_location) 
-        if w.strip().lower() not in stop_words and len(w.strip()) > 2
-    ]
-    
-    if not tokens:
-        return True
-        
-    # Standardize address words
-    addr_words = [w.strip() for w in re.split(r'[\s,.:;/-]+', addr_lower) if w.strip()]
-    
-    for t in tokens:
-        # 1. Direct match check
-        if t in addr_lower:
-            return True
-            
-        # 2. Check for state mapping match (e.g. if search had "Massachusetts" but address has "MA")
-        for state_name, abbrev in state_abbreviations.items():
-            if t == state_name and abbrev in addr_words:
-                return True
-            if t == abbrev and state_name in addr_lower:
-                return True
-                
-        # 3. Fuzzy spelling check (Levenshtein distance)
-        for aw in addr_words:
-            if len(aw) >= 5 and len(t) >= 5:
-                dist = levenshtein_distance(t, aw)
-                similarity = 1.0 - (dist / max(len(t), len(aw)))
-                if similarity >= 0.70:
-                    logger.info("Fuzzy address match successful", token=t, address_word=aw, similarity=similarity)
-                    return True
-                    
-        # 4. Handle fuzzy US state mapping (e.g. search typo "Messachussets" matching state list "massachusetts")
-        for state_name, abbrev in state_abbreviations.items():
-            if len(t) >= 5:
-                dist = levenshtein_distance(t, state_name)
-                similarity = 1.0 - (dist / max(len(t), len(state_name)))
-                if similarity >= 0.70 and abbrev in addr_words:
-                    logger.info("Fuzzy state match successful", token=t, target_state=state_name, similarity=similarity)
-                    return True
-                    
-    return False
+    """Always accept valid listings returned by Google Maps search query"""
+    return True
 
 async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_callback=None):
     """
