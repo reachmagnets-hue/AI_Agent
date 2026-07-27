@@ -16,10 +16,11 @@ RUNNING_CAMPAIGNS = set()
 
 def is_within_allowed_run_windows() -> bool:
     """
-    Checks if current local time in India (IST, UTC+5:30) falls within the allowed windows:
+    Checks if current local time (IST, UTC+5:30) falls within the allowed CALL windows:
     - 8:00 PM - 10:00 PM (20:00 to 22:00)
     - 12:00 AM - 1:00 AM (00:00 to 01:00)
     - 3:00 AM - 4:00 AM (03:00 to 04:00)
+    NOTE: Email campaigns use a separate check and bypass this.
     """
     from app.core.config import get_settings
     settings = get_settings()
@@ -30,7 +31,6 @@ def is_within_allowed_run_windows() -> bool:
     now_ist = datetime.now(timezone.utc).astimezone(ist_tz)
     
     hour = now_ist.hour
-    minute = now_ist.minute
     
     # Check Window 1: 8:00 PM - 10:00 PM (20:00 - 22:00)
     if 20 <= hour < 22:
@@ -46,22 +46,54 @@ def is_within_allowed_run_windows() -> bool:
         
     return False
 
+
+def is_within_email_send_window() -> bool:
+    """
+    Email campaigns run during the 6 PM - 6 AM window (IST).
+    Always returns True if BYPASS_TIME_GATING is set.
+    """
+    from app.core.config import get_settings
+    settings = get_settings()
+    if settings.BYPASS_TIME_GATING:
+        return True
+
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(timezone.utc).astimezone(ist_tz)
+    hour = now_ist.hour
+
+    # 6 PM - midnight or midnight - 6 AM
+    return hour >= 18 or hour < 6
+
 async def run_active_campaigns():
     """
-    Scans for active campaigns and spawns a dialer loop for them if not already running,
-    provided we are within allowed calling windows.
+    Scans for active campaigns and spawns loops for them:
+    - Email campaigns: run during 6 PM - 6 AM window
+    - Call campaigns: run during specific call windows only
     """
-    if not is_within_allowed_run_windows():
-        logger.debug("Currently outside campaign running windows. Skipping active campaigns check.")
-        return
-
     db = SessionLocal()
     try:
         active_campaigns = db.query(Campaign).filter(Campaign.status == "active").all()
         for campaign in active_campaigns:
-            if campaign.id not in RUNNING_CAMPAIGNS:
-                logger.info("Found active campaign to run", campaign_id=str(campaign.id), name=campaign.name)
-                asyncio.create_task(run_campaign_dialer_loop(cast(Any, campaign.id)))
+            if campaign.id in RUNNING_CAMPAIGNS:
+                continue
+
+            camp_type = getattr(campaign, "campaign_type", None) or ""
+            camp_name = getattr(campaign, "name", "") or ""
+
+            # Email campaign: check email send window
+            if camp_type == "email" or "email" in camp_name.lower():
+                if is_within_email_send_window():
+                    logger.info("Found active email campaign to run", campaign_id=str(campaign.id), name=campaign.name)
+                    asyncio.create_task(run_campaign_dialer_loop(cast(Any, campaign.id)))
+                else:
+                    logger.debug("Email campaign outside send window. Skipping.", name=campaign.name)
+            else:
+                # Call / LinkedIn / other campaigns: check call windows
+                if is_within_allowed_run_windows():
+                    logger.info("Found active call/linkedin campaign to run", campaign_id=str(campaign.id), name=campaign.name)
+                    asyncio.create_task(run_campaign_dialer_loop(cast(Any, campaign.id)))
+                else:
+                    logger.debug("Call campaign outside allowed windows. Skipping.", name=campaign.name)
     except Exception as e:
         logger.error("Error checking active campaigns in background runner", error=str(e))
     finally:
