@@ -15,9 +15,14 @@ settings = get_settings_lazy()
 # SQLAlchemy Setup
 Base = declarative_base()
 
+import os
+
 db_url = settings.DATABASE_URL
 if not db_url:
-    db_url = "sqlite:///./reachmagnets.db"
+    # Use absolute path to reachmagnets.db in project root
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+    db_path = os.path.join(base_dir, "reachmagnets.db")
+    db_url = f"sqlite:///{db_path}"
 
 if db_url.startswith("sqlite"):
     from sqlalchemy import event
