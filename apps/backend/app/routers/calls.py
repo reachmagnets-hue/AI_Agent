@@ -146,6 +146,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     today_start = datetime.combine(date.today(), datetime.min.time())
     
     total_contacts = db.query(Lead).filter(Lead.is_active == True).count()
+    leads_today = db.query(Lead).filter(Lead.created_at >= today_start).count()
     total_campaigns = db.query(Campaign).count()
     total_calls = db.query(Call).count()
     calls_today = db.query(Call).filter(Call.created_at >= today_start).count()
@@ -163,6 +164,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
     # 📧 Email Campaign Stats
     email_sent = db.query(Lead).filter(Lead.is_active == True, Lead.email_sent_at.isnot(None)).count()
+    email_sent_today = db.query(Lead).filter(Lead.is_active == True, Lead.email_sent_at >= today_start).count()
     email_bounced = db.query(Lead).filter(
         Lead.is_active == True,
         Lead.email_sent_at.isnot(None),
@@ -198,6 +200,10 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.is_active == True,
         or_(Lead.linkedin_sent_at.isnot(None), Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
     ).count()
+    linkedin_sent_today = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.linkedin_sent_at >= today_start
+    ).count()
     linkedin_connected = db.query(Lead).filter(
         Lead.is_active == True,
         Lead.linkedin_status.in_(["connected", "message_sent", "meeting_scheduled"])
@@ -217,6 +223,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         
     return {
         "totalContacts": total_contacts,
+        "leadsToday": leads_today,
         "totalCampaigns": total_campaigns,
         "totalCalls": total_calls,
         "callsToday": calls_today,
@@ -225,6 +232,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         "failedCalls": failed_calls,
         # Email Metrics
         "emailSent": email_sent,
+        "emailSentToday": email_sent_today,
         "emailDelivered": email_delivered,
         "emailOpened": email_opened,
         "emailClicked": email_clicked,
@@ -235,6 +243,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         "emailPending": email_pending,
         # LinkedIn Metrics
         "linkedinSent": linkedin_sent,
+        "linkedinSentToday": linkedin_sent_today,
         "linkedinConnected": linkedin_connected,
         "linkedinMessagesSent": linkedin_messages_sent,
         "linkedinReplied": linkedin_replied,

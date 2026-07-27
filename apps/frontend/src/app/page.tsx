@@ -182,6 +182,7 @@ export default function Dashboard() {
 
   const displayStats = stats || {
     totalContacts: 0,
+    leadsToday: 0,
     totalCampaigns: 0,
     totalCalls: 0,
     callsToday: 0,
@@ -189,6 +190,7 @@ export default function Dashboard() {
     pendingCalls: 0,
     failedCalls: 0,
     emailSent: 0,
+    emailSentToday: 0,
     emailDelivered: 0,
     emailOpened: 0,
     emailClicked: 0,
@@ -196,6 +198,7 @@ export default function Dashboard() {
     emailBounced: 0,
     emailBlocked: 0,
     linkedinSent: 0,
+    linkedinSentToday: 0,
     linkedinConnected: 0,
     linkedinReplied: 0,
     totalBookings: 0,
@@ -282,7 +285,10 @@ export default function Dashboard() {
                 </div>
               </CardHeader>
               <CardContent className="pt-2">
-                <div className="text-3xl font-extrabold text-slate-800">{displayStats.totalContacts?.toLocaleString()}</div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-extrabold text-slate-800">{displayStats.totalContacts?.toLocaleString()}</div>
+                  <span className="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">+{(displayStats.leadsToday || 0).toLocaleString()} today</span>
+                </div>
                 <p className="text-xs text-muted-foreground mt-1 font-medium flex items-center gap-1">
                   Active in your CRM <ArrowUpRight className="h-3 w-3 text-violet-500" />
                 </p>
@@ -312,7 +318,10 @@ export default function Dashboard() {
                 </div>
               </CardHeader>
               <CardContent className="pt-2">
-                <div className="text-3xl font-extrabold text-slate-800">{displayStats.totalCalls?.toLocaleString()}</div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-extrabold text-slate-800">{displayStats.totalCalls?.toLocaleString()}</div>
+                  <span className="text-xs font-bold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">+{(displayStats.callsToday || 0).toLocaleString()} today</span>
+                </div>
                 <p className="text-xs text-muted-foreground mt-1 font-medium flex items-center gap-1">
                   Total dials recorded <ArrowUpRight className="h-3 w-3 text-pink-500" />
                 </p>
@@ -327,7 +336,10 @@ export default function Dashboard() {
                 </div>
               </CardHeader>
               <CardContent className="pt-2">
-                <div className="text-3xl font-extrabold text-emerald-600">{displayStats.successRate ?? 0}%</div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-extrabold text-emerald-600">{displayStats.successRate ?? 0}%</div>
+                  <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">+{(displayStats.bookingsToday || 0).toLocaleString()} booked today</span>
+                </div>
                 <p className="text-xs text-muted-foreground mt-1 font-medium flex items-center gap-1">
                   Successful pitches / bookings
                 </p>
@@ -350,9 +362,9 @@ export default function Dashboard() {
                   <span className="text-slate-500 font-medium">Outbound Calls</span>
                   <span className="font-extrabold text-slate-800">{displayStats.totalCalls?.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
-                  <span className="text-slate-500 font-medium">Completed Today</span>
-                  <span className="font-bold text-slate-800">{displayStats.callsToday}</span>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2 bg-pink-50/50 px-2 py-1 rounded">
+                  <span className="text-pink-700 font-bold">Calls Conducted Today</span>
+                  <span className="font-extrabold text-pink-700">{displayStats.callsToday}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Failed Dials</span>
@@ -376,7 +388,7 @@ export default function Dashboard() {
               <CardContent className="pt-4 space-y-3">
                 <div className="grid grid-cols-3 gap-2 text-center border-b border-slate-100 pb-3">
                   <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                    <p className="text-[10px] text-slate-400 font-bold">SENT</p>
+                    <p className="text-[10px] text-slate-400 font-bold">ALL-TIME SENT</p>
                     <p className="text-base font-extrabold text-slate-800">{displayStats.emailSent?.toLocaleString()}</p>
                   </div>
                   <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100">
@@ -387,6 +399,10 @@ export default function Dashboard() {
                     <p className="text-[10px] text-amber-600 font-bold">PENDING</p>
                     <p className="text-base font-extrabold text-amber-700">{(displayStats.emailPending ?? (displayStats.totalContacts - displayStats.emailSent))?.toLocaleString()}</p>
                   </div>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2 bg-emerald-50/50 px-2 py-1 rounded">
+                  <span className="text-emerald-700 font-bold">Emails Sent Today</span>
+                  <span className="font-extrabold text-emerald-700">{displayStats.emailSentToday}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium flex items-center gap-1.5"><Eye className="h-4 w-4 text-blue-500" /> Opens</span>
@@ -425,6 +441,10 @@ export default function Dashboard() {
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Connections Sent</span>
                   <span className="font-extrabold text-blue-600">{displayStats.linkedinSent?.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">(Max 30/day)</span></span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2 bg-blue-50/50 px-2 py-1 rounded">
+                  <span className="text-blue-700 font-bold">Sent Today</span>
+                  <span className="font-extrabold text-blue-700">{displayStats.linkedinSentToday}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Connections Accepted</span>
