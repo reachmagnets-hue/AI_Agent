@@ -28,8 +28,8 @@ async def send_linkedin_campaign(campaign_id: str, limit: int = 30, force_simula
     settings = get_settings()
     cookie = settings.LINKEDIN_SESSION_COOKIE
     
-    # Enforce safe hard limit
-    daily_limit = 30
+    # Enforce strict daily cap of max 30 connection requests per day
+    daily_limit = min(getattr(settings, "LINKEDIN_DAILY_LIMIT", 30), 30)
     
     logger.info("Starting LinkedIn campaign delivery", campaign_id=campaign_id, daily_limit=daily_limit)
     
