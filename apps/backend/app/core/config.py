@@ -90,9 +90,9 @@ class Settings(BaseSettings):
     # Environment Configuration
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
-    SIMULATE_CALLS: bool = True
+    SIMULATE_CALLS: bool = False
 
-    ENABLE_AUTONOMOUS_SCHEDULER: bool = False
+    ENABLE_AUTONOMOUS_SCHEDULER: bool = True
 
     # Logging Configuration
     LOG_LEVEL: str = "INFO"

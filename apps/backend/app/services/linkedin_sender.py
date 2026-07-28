@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 from uuid import UUID
 from app.core.config import get_settings
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, uuid_match
 from app.models.lead import Lead
 from app.core.websocket import websocket_manager
 from app.services.ai_reviewer import analyze_inbox_message
@@ -57,7 +57,7 @@ async def send_linkedin_campaign(campaign_id: str, limit: int = 30, force_simula
         )
         if campaign_id:
             cid = UUID(campaign_id) if isinstance(campaign_id, str) else campaign_id
-            query = query.filter(Lead.campaign_id == cid)
+            query = query.filter(uuid_match(Lead.campaign_id, cid))
             
         actionable_leads = query.limit(remaining_actions).all()
         lead_ids_to_process = [lead.id for lead in actionable_leads]
