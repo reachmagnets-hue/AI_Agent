@@ -1,3 +1,4 @@
+import uuid
 import asyncio
 import structlog
 from datetime import datetime, timezone, timedelta
@@ -122,7 +123,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
             is_email = False
             is_linkedin = False
             try:
-                campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
+                campaign = db.query(Campaign).filter(Campaign.id == uuid.UUID(str(campaign_id))).first()
                 if not campaign or campaign.status != "active":
                     logger.info("Exiting campaign loop: campaign is no longer active", campaign_id=str(campaign_id))
                     break
@@ -158,7 +159,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 # because SQLAlchemy/SQLite: NULL != 'bounced' evaluates to NULL (not TRUE)
                 from sqlalchemy import or_ as sa_or_
                 lead = db.query(Lead).filter(
-                    Lead.campaign_id == str(campaign_id),
+                    Lead.campaign_id == uuid.UUID(str(campaign_id)),
                     Lead.status == "pending",
                     Lead.is_dnc == False,
                     Lead.is_active == True,
@@ -187,7 +188,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 logger.info("Processing email campaign lead", campaign_id=str(campaign_id), lead_id=str(lead_id))
                 db_update = SessionLocal()
                 try:
-                    db_item = db_update.query(Lead).filter(Lead.id == lead_id).first()
+                    db_item = db_update.query(Lead).filter(Lead.id == uuid.UUID(str(lead_id))).first()
                     if db_item:
                         if db_item.email:
                             from app.utils.automations import send_outreach_email
@@ -202,7 +203,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                                 lead_id=str(db_item.id)
                             )
                             
-                            db_item = db_update.query(Lead).filter(Lead.id == lead_id).first()
+                            db_item = db_update.query(Lead).filter(Lead.id == uuid.UUID(str(lead_id))).first()
                             if db_item:
                                 db_item.status = "called" if success else "failed"  # type: ignore
                                 db_update.commit()
