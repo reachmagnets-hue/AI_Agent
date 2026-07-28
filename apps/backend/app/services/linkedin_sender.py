@@ -123,11 +123,12 @@ async def run_playwright_campaign(cookie: str, lead_ids: list, remaining_actions
                     if not lead.linkedin_message:
                         try:
                             from app.utils.linkedin_generator import generate_linkedin_message
-                            lead.linkedin_message = await generate_linkedin_message(
+                            generated_msg = await generate_linkedin_message(
                                 lead.full_name or "",
                                 lead.business_name or "",
                                 lead.business_type or "auto body shop"
-                            )  # type: ignore
+                            )
+                            setattr(lead, 'linkedin_message', generated_msg)
                             db.commit()
                         except Exception as gen_err:
                             logger.error("Failed auto-generating message for lead", lead_id=str(lid), error=str(gen_err))

@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -186,11 +187,6 @@ async def trigger_linkedin_inbox_sync(background_tasks: BackgroundTasks):
     async def run_sync():
         await sync_linkedin_inbox()
         
-    if background_tasks:
-        background_tasks.add_task(run_sync)
-        return {"message": "LinkedIn Inbox AI Sync scheduled in the background."}
-    else:
-        # Run synchronously if no background_tasks provided (for testing)
-        result = await sync_linkedin_inbox()
-        return result
+    background_tasks.add_task(run_sync)
+    return {"message": "LinkedIn Inbox AI Sync scheduled in the background."}
 
