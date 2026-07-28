@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, desc, func
+from sqlalchemy import or_, and_, desc, func, cast, String
 from typing import List, Optional
 from datetime import datetime, date
 from uuid import UUID
@@ -143,13 +143,25 @@ def get_calls(
 @router.get("/dashboard/stats")
 def get_dashboard_stats(db: Session = Depends(get_db)):
     """Retrieve summarized analytics for the main dashboard"""
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_dt = datetime.combine(date.today(), datetime.min.time())
+    today_str = date.today().strftime("%Y-%m-%d")
     
     total_contacts = db.query(Lead).filter(Lead.is_active == True).count()
-    leads_today = db.query(Lead).filter(Lead.created_at >= today_start).count()
+    leads_today = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(
+            Lead.created_at >= today_dt,
+            cast(Lead.created_at, String).like(f"{today_str}%")
+        )
+    ).count()
     total_campaigns = db.query(Campaign).count()
     total_calls = db.query(Call).count()
-    calls_today = db.query(Call).filter(Call.created_at >= today_start).count()
+    calls_today = db.query(Call).filter(
+        or_(
+            Call.created_at >= today_dt,
+            cast(Call.created_at, String).like(f"{today_str}%")
+        )
+    ).count()
     failed_calls = db.query(Call).filter(Call.status.in_(["failed", "busy", "no-answer"])).count()
     pending_calls = db.query(Lead).filter(Lead.is_active == True, Lead.status == "pending").count()
     
@@ -163,11 +175,20 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         success_rate = round((total_meetings / total_calls) * 100.0, 1)
 
     # 📧 Email Campaign Stats
-    email_sent = db.query(Lead).filter(Lead.is_active == True, Lead.email_sent_at.isnot(None)).count()
-    email_sent_today = db.query(Lead).filter(Lead.is_active == True, Lead.email_sent_at >= today_start).count()
+    email_sent = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(Lead.email_sent == True, Lead.email_sent_at.isnot(None))
+    ).count()
+    email_sent_today = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(
+            Lead.email_sent_at >= today_dt,
+            cast(Lead.email_sent_at, String).like(f"{today_str}%"),
+            and_(Lead.email_sent == True, cast(Lead.updated_at, String).like(f"{today_str}%"))
+        )
+    ).count()
     email_bounced = db.query(Lead).filter(
         Lead.is_active == True,
-        Lead.email_sent_at.isnot(None),
         or_(Lead.email_status == "bounced", Lead.email_bounced_at.isnot(None))
     ).count()
     email_blocked = db.query(Lead).filter(
@@ -176,7 +197,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     ).count()
     email_delivered = db.query(Lead).filter(
         Lead.is_active == True,
-        Lead.email_sent_at.isnot(None),
+        or_(Lead.email_sent == True, Lead.email_sent_at.isnot(None)),
         Lead.email_status.notin_(["bounced", "blocked"])
     ).count()
     email_opened = db.query(Lead).filter(
@@ -192,17 +213,22 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.is_active == True,
         Lead.email.isnot(None),
         Lead.email != "",
+        or_(Lead.email_sent == False, Lead.email_sent.is_(None)),
         Lead.email_sent_at.is_(None)
     ).count()
 
     # 🔗 LinkedIn Campaign Stats
     linkedin_sent = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(Lead.linkedin_sent_at.isnot(None), Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
+        or_(Lead.linkedin_sent == True, Lead.linkedin_sent_at.isnot(None), Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
     ).count()
     linkedin_sent_today = db.query(Lead).filter(
         Lead.is_active == True,
-        Lead.linkedin_sent_at >= today_start
+        or_(
+            Lead.linkedin_sent_at >= today_dt,
+            cast(Lead.linkedin_sent_at, String).like(f"{today_str}%"),
+            and_(Lead.linkedin_sent == True, cast(Lead.updated_at, String).like(f"{today_str}%"))
+        )
     ).count()
     linkedin_connected = db.query(Lead).filter(
         Lead.is_active == True,
@@ -219,7 +245,12 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
     # 📅 Overall Bookings
     total_bookings = db.query(Appointment).count()
-    bookings_today = db.query(Appointment).filter(Appointment.created_at >= today_start).count()
+    bookings_today = db.query(Appointment).filter(
+        or_(
+            Appointment.created_at >= today_dt,
+            cast(Appointment.created_at, String).like(f"{today_str}%")
+        )
+    ).count()
         
     return {
         "totalContacts": total_contacts,
