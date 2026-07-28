@@ -105,21 +105,20 @@ async def start_linkedin_campaign_run(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
-    # Check if there are messages ready
-    ready_count = db.query(Lead).filter(
+    # Check if there are active leads with LinkedIn URLs
+    leads_count = db.query(Lead).filter(
         Lead.campaign_id == campaign_id,
         Lead.linkedin_url.isnot(None),
-        Lead.linkedin_message.isnot(None),
         Lead.linkedin_sent_at.is_(None),
         Lead.is_active == True
     ).count()
     
-    if ready_count == 0:
-        raise HTTPException(status_code=400, detail="No leads with generated LinkedIn messages ready to send in this campaign.")
+    if leads_count == 0:
+        raise HTTPException(status_code=400, detail="No leads with LinkedIn URLs ready to send in this campaign.")
         
     background_tasks.add_task(send_linkedin_campaign, str(campaign_id), min(limit, 30), simulate)
     
-    return {"message": f"LinkedIn campaign outreach started. Dispatching to {min(ready_count, limit, 30)} leads (Daily Limit: 30)."}
+    return {"message": f"LinkedIn campaign outreach started. Dispatching to {min(leads_count, limit, 30)} leads (Daily Limit: 30)."}
 
 
 @router.get("/stats")

@@ -101,3 +101,17 @@ async def generate_linkedin_message(full_name: str, business_name: str, business
     except Exception as e:
         logger.error("Error generating LinkedIn message with Gemini", error=str(e))
         return fallback_message
+
+
+def generate_linkedin_invitation_note(full_name: str, business_name: str, business_type: str) -> str:
+    """
+    Generate a clean, professional LinkedIn connection invitation note capped at 300 characters.
+    """
+    first_name = full_name.split()[0] if full_name else "there"
+    biz = business_name.strip() if business_name else "your shop"
+    ind = business_type.strip() if business_type else "auto body shop"
+    
+    note = f"Hi {first_name}, I came across {biz} while reviewing top {ind} businesses online. Impressive work! Would love to connect and exchange insights on local customer acquisition."
+    if len(note) > 295:
+        note = f"Hi {first_name}, I came across {biz} online. Impressive work! Would love to connect and exchange digital growth insights."
+    return note

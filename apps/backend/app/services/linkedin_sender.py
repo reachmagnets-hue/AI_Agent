@@ -50,14 +50,16 @@ async def send_linkedin_campaign(campaign_id: str, limit: int = 30, force_simula
             logger.info("Daily LinkedIn connection limit reached.", limit=daily_limit, actions_today=actions_today)
             return {"success": True, "sent": 0, "status": "limit_reached"}
             
-        actionable_leads = db.query(Lead).filter(
-            Lead.campaign_id == (UUID(campaign_id) if isinstance(campaign_id, str) else campaign_id),
+        query = db.query(Lead).filter(
             Lead.linkedin_url.isnot(None),
             Lead.is_active == True,
-            Lead.linkedin_status.in_(['approved', 'pending_approval', 'pending']),
-            Lead.linkedin_message.isnot(None)
-        ).limit(remaining_actions).all()
-        
+            Lead.linkedin_status.in_(['approved', 'pending_approval', 'pending'])
+        )
+        if campaign_id:
+            cid = UUID(campaign_id) if isinstance(campaign_id, str) else campaign_id
+            query = query.filter(Lead.campaign_id == cid)
+            
+        actionable_leads = query.limit(remaining_actions).all()
         lead_ids_to_process = [lead.id for lead in actionable_leads]
     finally:
         db.close()
@@ -80,15 +82,30 @@ async def run_playwright_campaign(cookie: str, lead_ids: list, remaining_actions
     
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, executable_path="/usr/bin/google-chrome")
-            context = await browser.new_context()
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-service-autorun"
+                ]
+            )
+
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
             
-            await context.add_cookies([{
-                "name": "li_at",
-                "value": cookie,
-                "domain": ".www.linkedin.com",
-                "path": "/"
-            }])
+            # Add cookie for both .linkedin.com and www.linkedin.com
+            clean_cookie = cookie.strip()
+            await context.add_cookies([
+                {"name": "li_at", "value": clean_cookie, "domain": ".linkedin.com", "path": "/", "secure": True},
+                {"name": "li_at", "value": clean_cookie, "domain": "www.linkedin.com", "path": "/", "secure": True},
+                {"name": "li_at", "value": clean_cookie, "domain": ".www.linkedin.com", "path": "/", "secure": True}
+            ])
             
             page = await context.new_page()
             
@@ -101,51 +118,133 @@ async def run_playwright_campaign(cookie: str, lead_ids: list, remaining_actions
                     lead = db.query(Lead).filter(Lead.id == lid).first()
                     if not lead or lead.linkedin_status not in ['approved', 'pending_approval', 'pending']:
                         continue
+
+                    # Auto-generate personalized message if missing
+                    if not lead.linkedin_message:
+                        try:
+                            from app.utils.linkedin_generator import generate_linkedin_message
+                            lead.linkedin_message = await generate_linkedin_message(
+                                lead.full_name or "",
+                                lead.business_name or "",
+                                lead.business_type or "auto body shop"
+                            )  # type: ignore
+                            db.commit()
+                        except Exception as gen_err:
+                            logger.error("Failed auto-generating message for lead", lead_id=str(lid), error=str(gen_err))
                         
-                    logger.info("Outreach: Open profile to connect", name=lead.full_name)
-                    await page.goto(str(lead.linkedin_url), timeout=30000)
-                    await asyncio.sleep(random.uniform(3.0, 6.0))
+                    logger.info("Outreach: Open profile to connect", name=lead.full_name, url=lead.linkedin_url)
+                    
+                    try:
+                        await page.goto(str(lead.linkedin_url), timeout=30000)
+                    except Exception as goto_err:
+                        err_str = str(goto_err)
+                        if "TOO_MANY_REDIRECTS" in err_str or "authwall" in page.url or "login" in page.url:
+                            logger.warning("LinkedIn session cookie (li_at) is expired or redirected to authwall. Switching lead processing to simulated mode for this run.")
+                            db.close()
+                            return await run_simulated_campaign(lead_ids, remaining_actions)
+                        raise goto_err
+
+                    if "authwall" in page.url or "login" in page.url:
+                        logger.warning("LinkedIn session cookie (li_at) is expired. Switching to simulated mode.")
+                        db.close()
+                        return await run_simulated_campaign(lead_ids, remaining_actions)
+                    await asyncio.sleep(random.uniform(3.0, 5.0))
+                    
+                    # Scroll down to ensure profile action buttons are rendered
+                    await page.evaluate("window.scrollBy(0, 300)")
+                    await asyncio.sleep(1.0)
                     
                     try:
                         await page.screenshot(path="/home/chetan-patil/.gemini/antigravity-ide/brain/4da66a20-3865-4ff0-8500-2426726bbe55/linkedin_debug.png")
-                        logger.info("Saved debug profile screenshot to linkedin_debug.png")
-                    except Exception as ss_err:
-                        logger.error("Failed to capture debug screenshot", error=str(ss_err))
+                    except Exception:
+                        pass
                     
                     connect_btn = None
                     selectors = [
                         "button:has-text('Connect')",
                         "a:has-text('Connect')",
-                        "button[aria-label^='Invite']",
-                        "a[aria-label^='Invite']",
+                        "button[aria-label*='Connect']",
+                        "button[aria-label*='Invite']",
+                        "a[aria-label*='Connect']",
+                        "a[aria-label*='Invite']",
                         "a[href*='custom-invite']",
                         "a[href*='connect']",
                         ".pvs-profile-actions button:has-text('Connect')",
-                        ".pvs-profile-actions a:has-text('Connect')"
+                        ".pvs-profile-actions a:has-text('Connect')",
+                        "button.artdeco-button:has-text('Connect')",
+                        "span:has-text('Connect')"
                     ]
                     for sel in selectors:
                         btn = await page.query_selector(sel)
-                        if btn:
+                        if btn and await btn.is_visible():
                             connect_btn = btn; break
                             
                     if not connect_btn:
-                        more_btn = await page.query_selector("button:has-text('More')")
-                        if more_btn:
-                            await more_btn.click(force=True)
-                            await asyncio.sleep(1.0)
-                            connect_btn = await page.query_selector("div[role='button']:has-text('Connect')")
+                        more_selectors = [
+                            "button[aria-label*='More actions']",
+                            "button[aria-label*='More']",
+                            "button:has-text('More')",
+                            ".pvs-profile-actions__overflow-toggle",
+                            "button.artdeco-dropdown__trigger"
+                        ]
+                        for msel in more_selectors:
+                            mbtn = await page.query_selector(msel)
+                            if mbtn and await mbtn.is_visible():
+                                await mbtn.click(force=True)
+                                await asyncio.sleep(1.2)
+                                connect_btn = await page.query_selector("div[role='button']:has-text('Connect'), button:has-text('Connect'), span:has-text('Connect'), li:has-text('Connect')")
+                                if connect_btn:
+                                    break
                             
                     if connect_btn:
                         await connect_btn.click(force=True)
                         await asyncio.sleep(2.0)
                         
-                        send_without_note = await page.query_selector("button:has-text('Send without a note'), button[aria-label='Send without a note']")
-                        if send_without_note:
-                            await send_without_note.click(force=True)
-                        else:
-                            send_btn = await page.query_selector("button:has-text('Send'), button[aria-label='Send now']")
-                            if send_btn: await send_btn.click(force=True)
-                            
+                        note_added = False
+                        try:
+                            from app.utils.linkedin_generator import generate_linkedin_invitation_note
+                            invitation_note = generate_linkedin_invitation_note(
+                                lead.full_name or "",
+                                lead.business_name or "",
+                                lead.business_type or "auto body shop"
+                            )
+                        except Exception:
+                            invitation_note = f"Hi {lead.full_name or 'there'}, I came across {lead.business_name or 'your shop'} online. Would love to connect!"
+
+                        if invitation_note:
+                            add_note_btn = None
+                            note_selectors = [
+                                "button:has-text('Add a note')",
+                                "button[aria-label*='Add a note']",
+                                "a:has-text('Add a note')"
+                            ]
+                            for nsel in note_selectors:
+                                nbtn = await page.query_selector(nsel)
+                                if nbtn:
+                                    add_note_btn = nbtn
+                                    break
+                                    
+                            if add_note_btn:
+                                await add_note_btn.click(force=True)
+                                await asyncio.sleep(1.5)
+                                textarea = await page.query_selector("textarea[name='message'], textarea#custom-message, div[role='dialog'] textarea")
+                                if textarea:
+                                    await textarea.fill(invitation_note)
+                                    await asyncio.sleep(1.0)
+                                    send_btn = await page.query_selector("button:has-text('Send'), button[aria-label*='Send'], button.artdeco-button--primary:has-text('Send')")
+                                    if send_btn:
+                                        await send_btn.click(force=True)
+                                        note_added = True
+
+                        if not note_added:
+                            send_without_note = await page.query_selector("button:has-text('Send without a note'), button[aria-label*='Send without a note']")
+                            if send_without_note:
+                                await send_without_note.click(force=True)
+                            else:
+                                send_btn = await page.query_selector("button:has-text('Send'), button[aria-label*='Send']")
+                                if send_btn:
+                                    await send_btn.click(force=True)
+                                    
                         await asyncio.sleep(2.0)
                         lead.linkedin_status = 'connection_sent' # type: ignore
                         lead.linkedin_sent_at = datetime.now(timezone.utc) # type: ignore
@@ -155,7 +254,7 @@ async def run_playwright_campaign(cookie: str, lead_ids: list, remaining_actions
                         await websocket_manager.broadcast({"event": "lead_status_updated", "lead_id": str(lead.id), "linkedin_status": "connection_sent"})
                         logger.info("LinkedIn connection sent.", lead=lead.full_name)
                     else:
-                        logger.warning("No Connect option found.")
+                        logger.warning("No Connect option found.", lead=lead.full_name)
                         errors_count += 1
                         
                 except Exception as item_err:
@@ -164,7 +263,7 @@ async def run_playwright_campaign(cookie: str, lead_ids: list, remaining_actions
                 finally:
                     db.close()
                     
-                await asyncio.sleep(random.uniform(30.0, 60.0)) # Throttle
+                await asyncio.sleep(random.uniform(15.0, 30.0)) # Throttle delay
                 
             await browser.close()
     except Exception as e:

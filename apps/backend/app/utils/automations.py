@@ -39,7 +39,7 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
 
     settings = get_settings()
     host = settings.SMTP_HOST or "smtp.gmail.com"
-    port = int(settings.SMTP_PORT or 465)
+    port = settings.SMTP_PORT or 465
     user = settings.SMTP_USER
     password = settings.SMTP_PASSWORD
     sender = settings.SENDER_EMAIL or user or ""
