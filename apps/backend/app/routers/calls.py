@@ -177,14 +177,13 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     # 📧 Email Campaign Stats
     email_sent = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(Lead.email_sent == True, Lead.email_sent_at.isnot(None))
+        or_(Lead.email_sent_at.isnot(None), Lead.email_status.isnot(None))
     ).count()
     email_sent_today = db.query(Lead).filter(
         Lead.is_active == True,
         or_(
             Lead.email_sent_at >= today_dt,
-            cast(Lead.email_sent_at, String).like(f"{today_str}%"),
-            and_(Lead.email_sent == True, cast(Lead.updated_at, String).like(f"{today_str}%"))
+            cast(Lead.email_sent_at, String).like(f"{today_str}%")
         )
     ).count()
     email_bounced = db.query(Lead).filter(
@@ -197,7 +196,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     ).count()
     email_delivered = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(Lead.email_sent == True, Lead.email_sent_at.isnot(None)),
+        Lead.email_sent_at.isnot(None),
         Lead.email_status.notin_(["bounced", "blocked"])
     ).count()
     email_opened = db.query(Lead).filter(
@@ -213,21 +212,19 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.is_active == True,
         Lead.email.isnot(None),
         Lead.email != "",
-        or_(Lead.email_sent == False, Lead.email_sent.is_(None)),
         Lead.email_sent_at.is_(None)
     ).count()
 
     # 🔗 LinkedIn Campaign Stats
     linkedin_sent = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(Lead.linkedin_sent == True, Lead.linkedin_sent_at.isnot(None), Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
+        or_(Lead.linkedin_sent_at.isnot(None), Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
     ).count()
     linkedin_sent_today = db.query(Lead).filter(
         Lead.is_active == True,
         or_(
             Lead.linkedin_sent_at >= today_dt,
-            cast(Lead.linkedin_sent_at, String).like(f"{today_str}%"),
-            and_(Lead.linkedin_sent == True, cast(Lead.updated_at, String).like(f"{today_str}%"))
+            cast(Lead.linkedin_sent_at, String).like(f"{today_str}%")
         )
     ).count()
     linkedin_connected = db.query(Lead).filter(
