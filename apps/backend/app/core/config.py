@@ -4,8 +4,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from typing import Optional
 
+import os
+
+backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+env_path = os.path.join(backend_dir, ".env")
+
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
+    model_config = SettingsConfigDict(
+        env_file=env_path,
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
     # Database Configuration
     SUPABASE_URL: Optional[str] = None

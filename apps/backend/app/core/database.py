@@ -15,13 +15,33 @@ settings = get_settings_lazy()
 # SQLAlchemy Setup
 Base = declarative_base()
 
+from sqlalchemy import or_, text
+
+def uuid_match(col, target_uuid):
+    """Helper to match UUID columns across PostgreSQL, SQLite string, and SQLite hex formats"""
+    if target_uuid is None:
+        return col.is_(None)
+    cid_str = str(target_uuid)
+    cid_hex = target_uuid.hex if hasattr(target_uuid, 'hex') else cid_str.replace('-', '')
+    t_name = getattr(col, 'table', None)
+    if t_name is not None and hasattr(t_name, 'name'):
+        t_prefix = f"{t_name.name}."
+    else:
+        t_prefix = ""
+    c_name = col.name
+    return or_(
+        col == target_uuid,
+        text(f"{t_prefix}{c_name} = '{cid_str}'"),
+        text(f"{t_prefix}{c_name} = '{cid_hex}'")
+    )
+
 import os
 
 db_url = settings.DATABASE_URL
 if not db_url:
-    # Use absolute path to reachmagnets.db in project root
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-    db_path = os.path.join(base_dir, "reachmagnets.db")
+    # Use absolute path to reachmagnets.db in apps/backend
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+    db_path = os.path.join(backend_dir, "reachmagnets.db")
     db_url = f"sqlite:///{db_path}"
 
 if db_url.startswith("sqlite"):
