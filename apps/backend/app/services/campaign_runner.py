@@ -101,14 +101,14 @@ async def run_active_campaigns():
 
 async def run_campaign_dialer_loop(campaign_id: UUID):
     """
-    Sequentially processes pending leads for an active campaign, making outbound calls.
-    Respects rate limits, calling hours, and automatically handles pause/completion states.
+    Sequentially processes pending leads for an active campaign, making outbound emails or calls.
+    Respects rate limits, sending/calling hours, and automatically handles pause/completion states.
     """
     if campaign_id in RUNNING_CAMPAIGNS:
         return
         
     RUNNING_CAMPAIGNS.add(campaign_id)
-    logger.info("Dialer loop started for campaign", campaign_id=str(campaign_id))
+    logger.info("Campaign loop started", campaign_id=str(campaign_id))
     
     try:
         from app.services.retell_service import RetellService
@@ -117,25 +117,35 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
         retell_service = RetellService()
         
         while True:
-            # Check calling windows
-            if not is_within_allowed_run_windows():
-                logger.info("Exiting campaign dialer loop: outside allowed calling windows", campaign_id=str(campaign_id))
-                break
-                
             db = SessionLocal()
             lead_id = None
+            is_email = False
+            is_linkedin = False
             try:
                 campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
                 if not campaign or campaign.status != "active":
-                    logger.info("Exiting campaign dialer loop: campaign is no longer active", campaign_id=str(campaign_id))
+                    logger.info("Exiting campaign loop: campaign is no longer active", campaign_id=str(campaign_id))
                     break
                 
-                # Intercept LinkedIn campaign
                 camp_type = getattr(campaign, "campaign_type", None) or ""
-                if camp_type == "linkedin" or (not camp_type and campaign.name and ("linkedin" in campaign.name.lower() or "linked in" in campaign.name.lower())):
+                camp_name = getattr(campaign, "name", "") or ""
+                is_email = camp_type == "email" or ("email" in camp_name.lower() or "e mail" in camp_name.lower())
+                is_linkedin = camp_type == "linkedin" or ("linkedin" in camp_name.lower() or "linked in" in camp_name.lower())
+
+                # Check time window based on campaign type
+                if is_email:
+                    if not is_within_email_send_window():
+                        logger.info("Exiting campaign loop: outside allowed email send window", campaign_id=str(campaign_id))
+                        break
+                else:
+                    if not is_within_allowed_run_windows():
+                        logger.info("Exiting campaign loop: outside allowed calling windows", campaign_id=str(campaign_id))
+                        break
+                
+                # Intercept LinkedIn campaign
+                if is_linkedin:
                     logger.info("Intercepted LinkedIn campaign. Starting LinkedIn outreach flow.", campaign_name=campaign.name)
                     from app.services.linkedin_sender import send_linkedin_campaign
-                    # Trigger the LinkedIn campaign execution
                     res = await send_linkedin_campaign(str(campaign_id))
                     logger.info("LinkedIn campaign execution done", result=res)
                     setattr(campaign, "status", "completed")
@@ -162,43 +172,22 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                     
                 lead_id = cast(Any, lead.id)
             except Exception as e:
-                logger.error("Error inside campaign dialer loop db query", campaign_id=str(campaign_id), error=str(e))
+                logger.error("Error inside campaign loop db query", campaign_id=str(campaign_id), error=str(e))
                 break
             finally:
                 db.close()
-                
-            # Check campaign type (prefer DB field, fallback to name detection for legacy)
-            is_email_only = False
-            db_check = SessionLocal()
-            try:
-                camp_check = db_check.query(Campaign).filter(Campaign.id == campaign_id).first()
-                if camp_check:
-                    camp_type = getattr(camp_check, "campaign_type", None) or ""
-                    if camp_type == "email":
-                        is_email_only = True
-                    elif not camp_type and camp_check.name:
-                        # Legacy: fall back to name detection
-                        name_lower = camp_check.name.lower()
-                        if "email" in name_lower or "e mail" in name_lower:
-                            is_email_only = True
-            except Exception as check_err:
-                logger.error("Error checking campaign type", error=str(check_err))
-            finally:
-                db_check.close()
 
-            if is_email_only:
-                logger.info("Processing email-only campaign lead", campaign_id=str(campaign_id), lead_id=str(lead_id))
+            if is_email:
+                logger.info("Processing email campaign lead", campaign_id=str(campaign_id), lead_id=str(lead_id))
                 db_update = SessionLocal()
                 try:
                     db_item = db_update.query(Lead).filter(Lead.id == lead_id).first()
                     if db_item:
                         if db_item.email:
                             from app.utils.automations import send_outreach_email
-                            # Update lead status to calling/sending to prevent double execution
                             db_item.status = "calling"  # type: ignore
                             db_update.commit()
                             
-                            # Send email
                             success = await send_outreach_email(
                                 to_email=str(db_item.email),
                                 to_name=str(db_item.full_name) if db_item.full_name else "there",
@@ -207,7 +196,6 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                                 lead_id=str(db_item.id)
                             )
                             
-                            # Re-fetch item to update status
                             db_item = db_update.query(Lead).filter(Lead.id == lead_id).first()
                             if db_item:
                                 db_item.status = "called" if success else "failed"  # type: ignore
