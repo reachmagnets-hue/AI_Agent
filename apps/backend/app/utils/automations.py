@@ -125,9 +125,6 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
                 finally:
                     db.close()
 
-            # Stagger emails by 45 seconds (Gmail rate limit protection)
-            logger.info("Enforcing 45-second stagger delay before next SMTP dispatch...")
-            await asyncio.sleep(45)
             return True
         except Exception as e:
             logger.error("Failed to send email via SMTP", error=str(e))
