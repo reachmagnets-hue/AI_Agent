@@ -154,12 +154,18 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                     break
                     
                 # Pull next pending lead (excluding bounced leads)
+                # Note: use or_(is_(None), ...) to include leads with NULL email_status
+                # because SQLAlchemy/SQLite: NULL != 'bounced' evaluates to NULL (not TRUE)
+                from sqlalchemy import or_ as sa_or_
                 lead = db.query(Lead).filter(
                     Lead.campaign_id == campaign_id,
                     Lead.status == "pending",
                     Lead.is_dnc == False,
                     Lead.is_active == True,
-                    Lead.email_status != "bounced",
+                    sa_or_(
+                        Lead.email_status.is_(None),
+                        Lead.email_status != "bounced"
+                    ),
                     Lead.email_bounced_at.is_(None)
                 ).order_by(Lead.created_at).first()
                 
