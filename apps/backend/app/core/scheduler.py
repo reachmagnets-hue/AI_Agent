@@ -92,12 +92,9 @@ class MasterAutonomousScheduler:
                 await asyncio.sleep(10)
                 continue
 
-            try:
-                from zoneinfo import ZoneInfo
-                tz_name = getattr(settings, "TIMEZONE", "Asia/Kolkata") or "Asia/Kolkata"
-                now_local = datetime.now(ZoneInfo(tz_name))
-            except Exception:
-                now_local = datetime.now()
+            from datetime import timedelta
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
+            now_local = datetime.now(timezone.utc).astimezone(ist_tz)
 
             current_weekday = now_local.weekday()  # 0=Mon, 5=Sat, 6=Sun
             current_hour = now_local.hour
@@ -263,7 +260,9 @@ class MasterAutonomousScheduler:
 
     def get_status(self) -> Dict[str, Any]:
         """Returns current scheduler operational metrics"""
-        now_local = datetime.now()
+        from datetime import timedelta
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        now_local = datetime.now(timezone.utc).astimezone(ist_tz)
         current_hour = now_local.hour
         current_weekday = now_local.weekday()
         is_weekend = current_weekday >= 5

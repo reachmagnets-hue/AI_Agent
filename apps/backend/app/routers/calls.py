@@ -143,8 +143,11 @@ def get_calls(
 @router.get("/dashboard/stats")
 def get_dashboard_stats(db: Session = Depends(get_db)):
     """Retrieve summarized analytics for the main dashboard"""
-    today_dt = datetime.combine(date.today(), datetime.min.time())
-    today_str = date.today().strftime("%Y-%m-%d")
+    from datetime import timedelta, timezone as dt_timezone
+    ist_tz = dt_timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(dt_timezone.utc).astimezone(ist_tz)
+    today_dt = datetime.combine(now_ist.date(), datetime.min.time())
+    today_str = now_ist.strftime("%Y-%m-%d")
     
     total_contacts = db.query(Lead).filter(Lead.is_active == True).count()
     leads_today = db.query(Lead).filter(
