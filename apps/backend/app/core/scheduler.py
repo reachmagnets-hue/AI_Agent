@@ -118,20 +118,13 @@ class MasterAutonomousScheduler:
                 continue
 
             # ---------------------------------------------------------------
-            # 🔍 1. EXTRACTION WINDOW: 06:00 AM - 06:00 PM (1-hr ON / 1-hr REST)
+            # 🔍 1. EXTRACTION WINDOW: 24/7 (Every 2 Hours)
             # ---------------------------------------------------------------
-            if 6 <= current_hour < 18:
-                # Alternating 1-hr ON pattern: Hours 6, 8, 10, 12, 14, 16 are ON; 7, 9, 11, 13, 15, 17 are REST
-                if current_hour % 2 == 0:
-                    if current_hour != self.last_extraction_hour:
-                        self.last_extraction_hour = current_hour
-                        
-                        logger.info("⏰ Extraction Window Active (1-hr ON). Triggering multi-location extraction...", hour=current_hour, target_per_run=MAX_LEADS_PER_EXTRACTION)
-                        asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
-                else:
-                    if current_hour != self.last_extraction_hour:
-                        self.last_extraction_hour = current_hour
-                        logger.info("☕ Extraction Window REST Hour (1-hr REST). Resting extractor for next hour...", hour=current_hour)
+            if current_hour % 2 == 0:
+                if current_hour != self.last_extraction_hour:
+                    self.last_extraction_hour = current_hour
+                    logger.info("⏰ Extraction Window Active. Triggering multi-location extraction...", hour=current_hour, target_per_run=MAX_LEADS_PER_EXTRACTION)
+                    asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
 
             # ---------------------------------------------------------------
             # 📧 2. EMAIL OUTREACH WINDOW: 06:00 PM - 06:00 AM (Max 450/night, 45s delay)

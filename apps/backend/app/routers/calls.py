@@ -156,7 +156,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.is_active == True,
         or_(
             Lead.created_at >= today_dt,
-            cast(Lead.created_at, String).like(f"{today_str}%")
+            cast(Lead.created_at, String).like(f"{today_str}%"),
+            Lead.imported_at >= today_dt,
+            cast(Lead.imported_at, String).like(f"{today_str}%")
         )
     ).count()
     total_campaigns = db.query(Campaign).count()
