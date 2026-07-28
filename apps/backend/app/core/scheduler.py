@@ -127,12 +127,10 @@ class MasterAutonomousScheduler:
                 # Alternating 1-hr ON pattern: Hours 6, 8, 10, 12, 14, 16 are ON; 7, 9, 11, 13, 15, 17 are REST
                 if current_hour % 2 == 0:
                     if current_hour != self.last_extraction_hour:
-                        location = TARGET_LOCATIONS[self.location_index % len(TARGET_LOCATIONS)]
-                        self.location_index += 1
                         self.last_extraction_hour = current_hour
                         
-                        logger.info("⏰ Extraction Window Active (1-hr ON). Triggering multi-location extraction...", location=location, hour=current_hour, progress=f"{self.location_index}/{len(TARGET_LOCATIONS)}")
-                        asyncio.create_task(self.run_scheduled_extraction(location, query="Auto Body Shop"))
+                        logger.info("⏰ Extraction Window Active (1-hr ON). Triggering multi-location extraction...", hour=current_hour, target_per_run=MAX_LEADS_PER_EXTRACTION)
+                        asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
                 else:
                     if current_hour != self.last_extraction_hour:
                         self.last_extraction_hour = current_hour
@@ -201,15 +199,37 @@ class MasterAutonomousScheduler:
                     break
                 await asyncio.sleep(1)
 
-    async def run_scheduled_extraction(self, location: str, query: str = "Auto Body Shop"):
-        """Background worker to extract leads from a location and store in DB with full deduplication"""
-        try:
-            from app.services.gmaps_scraper import scrape_gmaps
-            logger.info(f"Starting scheduled extraction: industry='{query}', location='{location}', limit={MAX_LEADS_PER_EXTRACTION}")
-            await scrape_gmaps(industry=query, location=location, limit=MAX_LEADS_PER_EXTRACTION)
-            logger.info(f"Completed scheduled extraction for '{query}' in '{location}'.")
-        except Exception as e:
-            logger.error(f"Failed to execute scheduled extraction for {location}", error=str(e))
+    async def run_scheduled_extraction(self, target_limit: int = MAX_LEADS_PER_EXTRACTION):
+        """
+        Background worker to extract leads across target locations until target_limit is reached.
+        If a location has fewer leads, it automatically shifts to the next location or alternate query keywords
+        until the target lead limit for this active hour is completely fulfilled.
+        """
+        queries = ["Auto Body Shop", "Auto Repair", "Car Detailing", "Auto Mechanic", "Tire Shop"]
+        extracted_this_run = 0
+
+        while extracted_this_run < target_limit and self._is_running:
+            location = TARGET_LOCATIONS[self.location_index % len(TARGET_LOCATIONS)]
+            query = queries[self.location_index % len(queries)]
+            self.location_index += 1
+
+            needed = target_limit - extracted_this_run
+            logger.info(f"Starting scheduled extraction: query='{query}', location='{location}', needed={needed}, extracted_so_far={extracted_this_run}/{target_limit}")
+
+            try:
+                from app.services.gmaps_scraper import scrape_gmaps
+                count = await scrape_gmaps(industry=query, location=location, limit=needed)
+                extracted_this_run += count
+                logger.info(f"Location '{location}' produced {count} new leads (Total this run: {extracted_this_run}/{target_limit}).")
+
+                if count == 0 or count < needed:
+                    logger.info(f"Location '{location}' yielded fewer leads ({count}/{needed}). Shifting to next target location...")
+                    await asyncio.sleep(2)
+            except Exception as e:
+                logger.error(f"Failed extraction attempt for {location}", error=str(e))
+                await asyncio.sleep(2)
+
+        logger.info(f"🎯 Extraction run completed! Extracted {extracted_this_run} total new leads this active hour.")
 
     def perform_vps_disk_cleanup(self):
         """Purges old temp files, Playwright screenshots, and log artifacts over 24h old to save VPS disk space"""
