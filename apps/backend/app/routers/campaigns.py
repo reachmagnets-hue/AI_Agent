@@ -123,25 +123,25 @@ def get_campaigns(
 @router.get("/{campaign_id}")
 def get_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
     """Retrieve full campaign overview panel details with conversion funnel stats"""
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
-    total_leads = db.query(Lead).filter(Lead.campaign_id == campaign_id).count()
-    called = db.query(Call).filter(Call.campaign_id == campaign_id).count()
-    answered = db.query(Call).filter(Call.campaign_id == campaign_id, Call.status == "completed").count()
-    interested = db.query(Call).filter(Call.campaign_id == campaign_id, Call.outcome == "interested").count()
-    booked = db.query(Appointment).filter(Appointment.campaign_id == campaign_id).count()
-    no_answer = db.query(Call).filter(Call.campaign_id == campaign_id, Call.status == "no_answer").count()
+    total_leads = db.query(Lead).filter(Lead.campaign_id == str(campaign_id)).count()
+    called = db.query(Call).filter(Call.campaign_id == str(campaign_id)).count()
+    answered = db.query(Call).filter(Call.campaign_id == str(campaign_id), Call.status == "completed").count()
+    interested = db.query(Call).filter(Call.campaign_id == str(campaign_id), Call.outcome == "interested").count()
+    booked = db.query(Appointment).filter(Appointment.campaign_id == str(campaign_id)).count()
+    no_answer = db.query(Call).filter(Call.campaign_id == str(campaign_id), Call.status == "no_answer").count()
     
     # Email stats
-    email_sent = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.email_sent_at.isnot(None), Lead.is_active == True).count()
-    email_delivered = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.email_sent_at.isnot(None), Lead.email_status.notin_(["bounced", "blocked"]), Lead.is_active == True).count()
-    email_opened = db.query(Lead).filter(Lead.campaign_id == campaign_id, or_(Lead.email_status.in_(["opened", "clicked", "replied"]), Lead.email_opened_at.isnot(None)), Lead.is_active == True).count()
-    email_replied = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.email_status == "replied", Lead.is_active == True).count()
+    email_sent = db.query(Lead).filter(Lead.campaign_id == str(campaign_id), Lead.email_sent_at.isnot(None), Lead.is_active == True).count()
+    email_delivered = db.query(Lead).filter(Lead.campaign_id == str(campaign_id), Lead.email_sent_at.isnot(None), Lead.email_status.notin_(["bounced", "blocked"]), Lead.is_active == True).count()
+    email_opened = db.query(Lead).filter(Lead.campaign_id == str(campaign_id), or_(Lead.email_status.in_(["opened", "clicked", "replied"]), Lead.email_opened_at.isnot(None)), Lead.is_active == True).count()
+    email_replied = db.query(Lead).filter(Lead.campaign_id == str(campaign_id), Lead.email_status == "replied", Lead.is_active == True).count()
 
     # Cost estimation
-    total_duration_sec = db.query(func.sum(Call.duration_seconds)).filter(Call.campaign_id == campaign_id).scalar() or 0
+    total_duration_sec = db.query(func.sum(Call.duration_seconds)).filter(Call.campaign_id == str(campaign_id)).scalar() or 0
     total_minutes = total_duration_sec / 60.0
     estimated_cost = total_minutes * 0.07 # $0.07/min Retell standard billing
     
@@ -165,9 +165,9 @@ def get_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
     }
 
     # Fetch last 10 calls
-    recent_calls = db.query(Call).filter(Call.campaign_id == campaign_id).order_by(desc(Call.created_at)).limit(10).all()
+    recent_calls = db.query(Call).filter(Call.campaign_id == str(campaign_id)).order_by(desc(Call.created_at)).limit(10).all()
     # Fetch last 5 appointments
-    recent_bookings = db.query(Appointment).filter(Appointment.campaign_id == campaign_id).order_by(desc(Appointment.created_at)).limit(5).all()
+    recent_bookings = db.query(Appointment).filter(Appointment.campaign_id == str(campaign_id)).order_by(desc(Appointment.created_at)).limit(5).all()
 
     return {
         "campaign": campaign,
@@ -295,7 +295,7 @@ def update_campaign(
     db: Session = Depends(get_db)
 ):
     """Update settings of an existing campaign (only allowed if draft or paused)"""
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
@@ -328,7 +328,7 @@ def update_campaign(
 @router.post("/{campaign_id}/start")
 async def start_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Start campaign dialing queue using Retell AI"""
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
@@ -340,14 +340,14 @@ async def start_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, d
     
     # Pull all pending leads assigned to this campaign
     leads = db.query(Lead).filter(
-        Lead.campaign_id == campaign_id,
+        Lead.campaign_id == str(campaign_id),
         Lead.status == "pending",
         Lead.is_dnc == False,
         Lead.is_active == True
     ).all()
     
     # Update total_leads count
-    total = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.is_active == True).count()
+    total = db.query(Lead).filter(Lead.campaign_id == str(campaign_id), Lead.is_active == True).count()
     campaign.total_leads = total # type: ignore
     db.commit()
     
@@ -374,7 +374,7 @@ async def start_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, d
 @router.post("/{campaign_id}/pause")
 def pause_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
     """Pause dialer outreach"""
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     campaign.status = "paused" # type: ignore
@@ -384,7 +384,7 @@ def pause_campaign(campaign_id: UUID, db: Session = Depends(get_db)):
 @router.post("/{campaign_id}/resume")
 async def resume_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Resume dialer outreach"""
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
@@ -396,7 +396,7 @@ async def resume_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, 
     
     # Pull remaining pending leads
     leads = db.query(Lead).filter(
-        Lead.campaign_id == campaign_id,
+        Lead.campaign_id == str(campaign_id),
         Lead.status == "pending",
         Lead.is_dnc == False,
         Lead.is_active == True
@@ -431,7 +431,7 @@ def get_campaign_leads(
     db: Session = Depends(get_db)
 ):
     """GET leads scoped specifically to this campaign"""
-    query = db.query(Lead).filter(Lead.campaign_id == campaign_id, Lead.is_active == True)
+    query = db.query(Lead).filter(Lead.campaign_id == str(campaign_id), Lead.is_active == True)
     if search:
         query = query.filter(Lead.full_name.ilike(f"%{search}%"))
     if status:
@@ -444,13 +444,13 @@ def get_campaign_leads(
 @router.get("/{campaign_id}/calls")
 def get_campaign_calls(campaign_id: UUID, db: Session = Depends(get_db)):
     """GET call list for this campaign"""
-    calls = db.query(Call).filter(Call.campaign_id == campaign_id).order_by(desc(Call.created_at)).all()
+    calls = db.query(Call).filter(Call.campaign_id == str(campaign_id)).order_by(desc(Call.created_at)).all()
     return calls
 
 @router.get("/{campaign_id}/appointments")
 def get_campaign_appointments(campaign_id: UUID, db: Session = Depends(get_db)):
     """GET appointments booked from this campaign"""
-    appts = db.query(Appointment).filter(Appointment.campaign_id == campaign_id).order_by(desc(Appointment.created_at)).all()
+    appts = db.query(Appointment).filter(Appointment.campaign_id == str(campaign_id)).order_by(desc(Appointment.created_at)).all()
     return appts
 
 async def make_single_call_sqlalchemy(lead_id: UUID, campaign_id: UUID, retell_service: RetellService):
@@ -463,7 +463,7 @@ async def make_single_call_sqlalchemy(lead_id: UUID, campaign_id: UUID, retell_s
     call_log = None
     try:
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
-        campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+        campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
         if not lead or not campaign: return
 
         # Timezone calling hours compliance check
@@ -545,12 +545,12 @@ def recampaign_leads(
     db: Session = Depends(get_db)
 ):
     """Bulk reset leads for a specific campaign back to pending"""
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
         
     query = db.query(Lead).filter(
-        Lead.campaign_id == campaign_id,
+        Lead.campaign_id == str(campaign_id),
         Lead.is_active == True
     )
     

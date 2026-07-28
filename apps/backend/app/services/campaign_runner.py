@@ -122,7 +122,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
             is_email = False
             is_linkedin = False
             try:
-                campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+                campaign = db.query(Campaign).filter(Campaign.id == str(campaign_id)).first()
                 if not campaign or campaign.status != "active":
                     logger.info("Exiting campaign loop: campaign is no longer active", campaign_id=str(campaign_id))
                     break
@@ -158,7 +158,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 # because SQLAlchemy/SQLite: NULL != 'bounced' evaluates to NULL (not TRUE)
                 from sqlalchemy import or_ as sa_or_
                 lead = db.query(Lead).filter(
-                    Lead.campaign_id == campaign_id,
+                    Lead.campaign_id == str(campaign_id),
                     Lead.status == "pending",
                     Lead.is_dnc == False,
                     Lead.is_active == True,
