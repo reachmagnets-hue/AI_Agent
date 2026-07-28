@@ -340,12 +340,20 @@ async def start_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, d
     campaign.started_at = datetime.now(timezone.utc) # type: ignore
     
     # Pull all pending leads assigned to this campaign
-    leads = db.query(Lead).filter(
-        text(f"leads.campaign_id = '{str(campaign_id)}'"),
-        Lead.status == "pending",
-        Lead.is_dnc == False,
-        Lead.is_active == True
-    ).all()
+    if campaign.campaign_type == "email":
+        leads = db.query(Lead).filter(
+            uuid_match(Lead.campaign_id, campaign_id),
+            Lead.email_sent_at.is_(None),
+            Lead.is_dnc == False,
+            Lead.is_active == True
+        ).all()
+    else:
+        leads = db.query(Lead).filter(
+            uuid_match(Lead.campaign_id, campaign_id),
+            Lead.status == "pending",
+            Lead.is_dnc == False,
+            Lead.is_active == True
+        ).all()
     
     # Update total_leads count
     total = db.query(Lead).filter(uuid_match(Lead.campaign_id, campaign_id), Lead.is_active == True).count()
@@ -551,22 +559,31 @@ def recampaign_leads(
         raise HTTPException(status_code=404, detail="Campaign not found")
         
     query = db.query(Lead).filter(
-        text(f"leads.campaign_id = '{str(campaign_id)}'"),
+        uuid_match(Lead.campaign_id, campaign_id),
         Lead.is_active == True
     )
     
-    if not reset_all:
-        # Only reset unpicked/failed/voicemail/no-answer ones
-        query = query.filter(Lead.status.in_(["failed", "no_answer", "voicemail", "busy"]))
+    if campaign.campaign_type == "email":
+        if not reset_all:
+            query = query.filter(or_(Lead.email_sent_at.is_(None), Lead.email_status.in_(["failed", "bounced"])))
+        else:
+            query = query.filter(Lead.email_status != "replied")
     else:
-        # Reset all leads except those who successfully booked a meeting
-        query = query.filter(Lead.status != "meeting_booked")
+        if not reset_all:
+            # Only reset unpicked/failed/voicemail/no-answer ones
+            query = query.filter(Lead.status.in_(["failed", "no_answer", "voicemail", "busy"]))
+        else:
+            # Reset all leads except those who successfully booked a meeting
+            query = query.filter(Lead.status != "meeting_booked")
         
     leads_to_reset = query.all()
     
     count = 0
     for lead in leads_to_reset:
         lead.status = "pending" # type: ignore
+        if campaign.campaign_type == "email":
+            lead.email_sent_at = None # type: ignore
+            lead.email_status = None # type: ignore
         count += 1
         
     if campaign.status == "completed":
