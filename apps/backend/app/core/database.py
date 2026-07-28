@@ -53,6 +53,7 @@ if db_url.startswith("sqlite"):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 else:
     engine = create_engine(db_url, pool_pre_ping=True)
