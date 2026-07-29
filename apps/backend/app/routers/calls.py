@@ -155,9 +155,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     leads_today = db.query(Lead).filter(
         Lead.is_active == True,
         or_(
-            Lead.created_at >= today_dt,
             cast(Lead.created_at, String).like(f"{today_str}%"),
-            Lead.imported_at >= today_dt,
             cast(Lead.imported_at, String).like(f"{today_str}%")
         )
     ).count()
