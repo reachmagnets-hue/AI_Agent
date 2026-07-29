@@ -38,14 +38,26 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
         SMTP_LOCK = asyncio.Lock()
 
     settings = get_settings()
-    host = settings.SMTP_HOST or "smtp.gmail.com"
-    port = settings.SMTP_PORT or 465
-    user = settings.SMTP_USER
-    password = settings.SMTP_PASSWORD
-    sender = settings.SENDER_EMAIL or user or ""
-    sender_name = settings.SENDER_NAME or "Reach Magnets"
+    host = os.getenv("SMTP_HOST") or settings.SMTP_HOST or "smtp.gmail.com"
+    port = int(os.getenv("SMTP_PORT") or settings.SMTP_PORT or 587)
+    user = os.getenv("SMTP_USER") or settings.SMTP_USER
+    password = os.getenv("SMTP_PASSWORD") or settings.SMTP_PASSWORD
 
-    logger.info("Triggering SMTP email direct dispatch (waiting for queue lock)", to=to_email, host=host, port=port)
+    if not user or not password:
+        env_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env"))
+        if os.path.exists(env_file):
+            with open(env_file, "r") as f:
+                for line in f:
+                    line_s = line.strip()
+                    if line_s.startswith("SMTP_USER="):
+                        user = line_s.split("=", 1)[1].strip('"\'')
+                    elif line_s.startswith("SMTP_PASSWORD="):
+                        password = line_s.split("=", 1)[1].strip('"\'')
+
+    sender = os.getenv("SENDER_EMAIL") or settings.SENDER_EMAIL or user or "reachmagnets@gmail.com"
+    sender_name = os.getenv("SENDER_NAME") or settings.SENDER_NAME or "Reach Magnets"
+
+    logger.info("Triggering SMTP email direct dispatch (waiting for queue lock)", to=to_email, host=host, port=port, user=user)
 
     if not user or not password:
         logger.warning("SMTP user or password not configured. Mocking SMTP email delivery.")
