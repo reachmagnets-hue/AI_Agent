@@ -183,14 +183,17 @@ export default function Dashboard() {
   const displayStats = stats || {
     totalContacts: 0,
     leadsToday: 0,
+    leadsYesterday: 0,
     totalCampaigns: 0,
     totalCalls: 0,
     callsToday: 0,
+    callsYesterday: 0,
     successRate: 0,
     pendingCalls: 0,
     failedCalls: 0,
     emailSent: 0,
     emailSentToday: 0,
+    emailSentYesterday: 0,
     emailDelivered: 0,
     emailOpened: 0,
     emailClicked: 0,
@@ -199,8 +202,12 @@ export default function Dashboard() {
     emailBlocked: 0,
     linkedinSent: 0,
     linkedinSentToday: 0,
+    linkedinSentYesterday: 0,
     linkedinConnected: 0,
     linkedinReplied: 0,
+    directoriesExtracted: 0,
+    leadsWithEmails: 0,
+    leadsWithSocials: 0,
     totalBookings: 0,
     bookingsToday: 0
   };
@@ -333,6 +340,67 @@ export default function Dashboard() {
                 </div>
                 <div className="text-2xl font-black text-amber-300">{(displayStats.bookingsToday || 0).toLocaleString()} <span className="text-xs font-normal text-amber-200">Booked</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Direct Meetings</div>
+            </div>
+          </div>
+
+          {/* 📊 YESTERDAY & ENRICHMENT PERFORMANCE OVERVIEW BANNER */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-indigo-500/20">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-3 border-b border-white/10 gap-2">
+              <div>
+                <h2 className="text-xl font-black tracking-tight flex items-center gap-2 text-indigo-300">
+                  <BarChart3 className="h-5 w-5 text-indigo-400" /> YESTERDAY & ENRICHMENT PERFORMANCE OVERVIEW
+                </h2>
+                <p className="text-xs text-slate-300">Yesterday's outreach stats & extracted local directory profile links breakdown</p>
+              </div>
+              <div className="flex items-center gap-2 bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full text-xs font-extrabold border border-indigo-500/40">
+                End-to-End Metrics
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {/* 1. Leads Extracted Yesterday */}
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all">
+                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Users className="h-3.5 w-3.5 text-slate-400" /> Leads Yesterday
+                </div>
+                <div className="text-2xl font-black text-white">+{(displayStats.leadsYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-slate-300">Leads</span></div>
+                <div className="text-[10px] text-slate-400 mt-1 font-medium">Scraped & Uploaded</div>
+              </div>
+
+              {/* 2. Emails Sent Yesterday */}
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all">
+                <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Mail className="h-3.5 w-3.5 text-emerald-400" /> Emails Yesterday
+                </div>
+                <div className="text-2xl font-black text-white">{(displayStats.emailSentYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Emails</span></div>
+                <div className="text-[10px] text-slate-400 mt-1 font-medium">Sent Batch</div>
+              </div>
+
+              {/* 3. Calls Placed Yesterday */}
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all">
+                <div className="text-xs font-bold text-pink-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Phone className="h-3.5 w-3.5 text-pink-400" /> Calls Yesterday
+                </div>
+                <div className="text-2xl font-black text-white">{(displayStats.callsYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-pink-200">Calls</span></div>
+                <div className="text-[10px] text-slate-400 mt-1 font-medium">Designated Windows</div>
+              </div>
+
+              {/* 4. LinkedIn Sent Yesterday */}
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all">
+                <div className="text-xs font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Linkedin className="h-3.5 w-3.5 text-blue-400" /> LinkedIn Yesterday
+                </div>
+                <div className="text-2xl font-black text-white">{(displayStats.linkedinSentYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-blue-200">Sent</span></div>
+                <div className="text-[10px] text-slate-400 mt-1 font-medium">Connections & Msgs</div>
+              </div>
+
+              {/* 5. Directory Profiles Enriched */}
+              <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all col-span-2 md:col-span-1">
+                <div className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-400" /> Directories Enriched
+                </div>
+                <div className="text-2xl font-black text-amber-300">{(displayStats.directoriesExtracted || 0).toLocaleString()} <span className="text-xs font-normal text-amber-200">Profiles</span></div>
+                <div className="text-[10px] text-slate-400 mt-1 font-medium">Yelp, BBB, Nextdoor, etc.</div>
               </div>
             </div>
           </div>
