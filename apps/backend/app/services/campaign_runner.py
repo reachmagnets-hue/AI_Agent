@@ -216,6 +216,13 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                             db_item = db_update.query(Lead).filter(uuid_match(Lead.id, lead_id)).first()
                             if db_item:
                                 db_item.status = "called" if success else "failed"  # type: ignore
+                                if success:
+                                    now_utc = datetime.now(timezone.utc)
+                                    db_item.email_sent_at = now_utc  # type: ignore
+                                    if not db_item.email_delivered_at:
+                                        db_item.email_delivered_at = now_utc  # type: ignore
+                                    if db_item.email_status not in ["opened", "clicked", "replied", "bounced", "blocked"]:
+                                        db_item.email_status = "delivered"  # type: ignore
                                 db_update.commit()
                             
                             try:

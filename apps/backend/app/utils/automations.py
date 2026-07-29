@@ -117,12 +117,11 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
             logger.info("SMTP email dispatched successfully", to=to_email, message_id=msg_id)
 
             if lead_id:
-                from app.core.database import SessionLocal
+                from app.core.database import SessionLocal, uuid_match
                 from app.models.lead import Lead
-                from uuid import UUID
                 db = SessionLocal()
                 try:
-                    lead = db.query(Lead).filter(Lead.id == UUID(lead_id)).first()
+                    lead = db.query(Lead).filter(uuid_match(Lead.id, lead_id)).first()
                     if lead:
                         now_utc = datetime.now(timezone.utc)
                         lead.email_msg_id = msg_id  # type: ignore
