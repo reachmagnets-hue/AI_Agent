@@ -23,16 +23,11 @@ def uuid_match(col, target_uuid):
         return col.is_(None)
     val_str = str(target_uuid).lower().strip()
     val_hex = val_str.replace('-', '')
-    try:
-        u_obj = uuid.UUID(val_hex)
-        val_hyphen = str(u_obj)
-        return or_(
-            col == u_obj,
-            cast(col, String) == val_hex,
-            cast(col, String) == val_hyphen
-        )
-    except Exception:
-        return cast(col, String) == val_str
+    
+    return or_(
+        cast(col, String) == val_hex,
+        cast(col, String) == val_str
+    )
 
 import os
 
