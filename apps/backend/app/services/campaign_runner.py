@@ -232,6 +232,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                                 lead_id=str(db_item.id)
                             )
                             
+                            db_update.expire_all()
                             db_item = db_update.query(Lead).filter(uuid_match(Lead.id, lead_id)).first()
                             if db_item:
                                 db_item.status = "called" if success else "failed"  # type: ignore
