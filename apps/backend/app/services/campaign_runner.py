@@ -163,8 +163,8 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                             Lead.email_sent_at.is_(None),
                             Lead.email.isnot(None),
                             Lead.email != "",
-                            Lead.is_dnc == False,
-                            Lead.is_active == True,
+                            sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                            sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
                             sa_or_(
                                 Lead.email_status.is_(None),
                                 Lead.email_status != "bounced"
@@ -177,8 +177,8 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                             Lead.email_sent_at.is_(None),
                             Lead.email.isnot(None),
                             Lead.email != "",
-                            Lead.is_dnc == False,
-                            Lead.is_active == True,
+                            sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                            sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
                             sa_or_(
                                 Lead.email_status.is_(None),
                                 Lead.email_status != "bounced"
