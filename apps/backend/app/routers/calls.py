@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, desc, func, cast, String
+from sqlalchemy import or_, and_, desc, func, cast, String, text
 from typing import List, Optional
 from datetime import datetime, date
 from uuid import UUID
@@ -309,6 +309,57 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             cast(Appointment.created_at, String).like(f"{today_str}%")
         )
     ).count()
+
+    # ── LAST ACTIVE DAY fallback ──────────────────────────────────────────────
+    # When today shows 0 for any key metric, find the most recent day with real data
+    # so the frontend can label it as "Last active: Jul 22" instead of "0 today"
+    
+    last_active_leads_date = None
+    last_active_leads_count = 0
+    last_active_email_date = None
+    last_active_email_count = 0
+    last_active_calls_date = None
+    last_active_calls_count = 0
+
+    if leads_today == 0:
+        # Find most recent day with lead imports
+        row = db.execute(
+            text("SELECT substr(created_at,1,10) as d, count(*) as c FROM leads WHERE is_active=1 GROUP BY d ORDER BY d DESC LIMIT 1")
+        ).fetchone()
+        if row:
+            last_active_leads_date = row[0]
+            last_active_leads_count = row[1]
+
+    if email_sent_today == 0:
+        row = db.execute(
+            text("SELECT substr(email_sent_at,1,10) as d, count(*) as c FROM leads WHERE email_sent_at IS NOT NULL AND is_active=1 GROUP BY d ORDER BY d DESC LIMIT 1")
+        ).fetchone()
+        if row:
+            last_active_email_date = row[0]
+            last_active_email_count = row[1]
+
+    if calls_today == 0:
+        row = db.execute(
+            text("SELECT substr(started_at,1,10) as d, count(*) as c FROM calls WHERE started_at IS NOT NULL GROUP BY d ORDER BY d DESC LIMIT 1")
+        ).fetchone()
+        if row:
+            last_active_calls_date = row[0]
+            last_active_calls_count = row[1]
+
+    # 7-day rolling window stats (last 7 days regardless of today)
+    seven_days_ago = (now_ist.date() - timedelta(days=7)).strftime("%Y-%m-%d")
+    leads_7d = db.query(Lead).filter(
+        Lead.is_active == True,
+        cast(Lead.created_at, String) >= seven_days_ago
+    ).count()
+    calls_7d = db.query(Call).filter(
+        cast(Call.created_at, String) >= seven_days_ago
+    ).count()
+    email_sent_7d = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.email_sent_at.isnot(None),
+        cast(Lead.email_sent_at, String) >= seven_days_ago
+    ).count()
         
     return {
         "totalContacts": total_contacts,
@@ -347,8 +398,21 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         "leadsWithSocials": leads_with_socials,
         # Bookings Metrics
         "totalBookings": total_bookings,
-        "bookingsToday": bookings_today
+        "bookingsToday": bookings_today,
+        # ── Last-Active-Day fallback (populated when today = 0) ──
+        "lastActiveLeadsDate": last_active_leads_date,
+        "lastActiveLeadsCount": last_active_leads_count,
+        "lastActiveEmailDate": last_active_email_date,
+        "lastActiveEmailCount": last_active_email_count,
+        "lastActiveCallsDate": last_active_calls_date,
+        "lastActiveCallsCount": last_active_calls_count,
+        # 7-day rolling window
+        "leads7d": leads_7d,
+        "calls7d": calls_7d,
+        "emailSent7d": email_sent_7d,
     }
+
+
 
 @router.get("/stats/overview")
 def get_calls_stats_overview(db: Session = Depends(get_db)):
