@@ -15,7 +15,7 @@ settings = get_settings_lazy()
 # SQLAlchemy Setup
 Base = declarative_base()
 
-from sqlalchemy import cast, String
+from sqlalchemy import cast, String, or_
 
 def uuid_match(col, target_uuid):
     """Helper to match UUID columns across PostgreSQL, SQLite string with hyphens, and SQLite hex formats"""
