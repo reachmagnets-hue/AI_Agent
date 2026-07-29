@@ -180,10 +180,11 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                     ).order_by(Lead.created_at).first()
                 
                 if not lead:
-                    logger.info("No more pending leads found. Campaign completed.", campaign_id=str(campaign_id))
-                    setattr(campaign, "status", "completed")
-                    setattr(campaign, "completed_at", datetime.now(timezone.utc))
-                    db.commit()
+                    logger.info("No more pending leads found for campaign", campaign_id=str(campaign_id))
+                    if not is_email:
+                        setattr(campaign, "status", "completed")
+                        setattr(campaign, "completed_at", datetime.now(timezone.utc))
+                        db.commit()
                     break
                     
                 lead_id = cast(Any, lead.id)
