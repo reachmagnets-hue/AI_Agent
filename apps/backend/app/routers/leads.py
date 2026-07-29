@@ -18,6 +18,8 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 
 from fastapi.responses import StreamingResponse
 
+# ─── STATIC ROUTES FIRST (before any /{lead_id} dynamic routes) ───────────────
+
 @router.get("/export/csv")
 def export_leads_csv(
     search: Optional[str] = Query(None),
@@ -180,6 +182,149 @@ def export_leads_csv(
         headers={"Content-Disposition": "attachment; filename=reach_magnet_leads.csv"}
     )
 
+@router.get("/stats/overview")
+def get_leads_overview_stats(db: Session = Depends(get_db)):
+    """Overview dashboard analytics counts"""
+    total_leads = db.query(Lead).filter(Lead.is_active == True).count()
+    
+    # By status
+    status_counts = db.query(Lead.status, func.count(Lead.id))\
+        .filter(Lead.is_active == True)\
+        .group_by(Lead.status).all()
+    by_status = {s: c for s, c in status_counts}
+    
+    # By campaign (SQLite-compatible: no Integer cast needed)
+    from sqlalchemy import case
+    campaign_rows = db.query(
+        Campaign.name,
+        func.count(Lead.id).label("total"),
+        func.sum(case((Lead.status == "meeting_booked", 1), else_=0)).label("booked")
+    ).join(Lead, Lead.campaign_id == Campaign.id)\
+     .filter(Lead.is_active == True)\
+     .group_by(Campaign.name).all()
+    
+    by_campaign = [
+        {"campaign_name": name, "total": total, "booked": int(booked or 0)}
+        for name, total, booked in campaign_rows
+    ]
+    
+    # Daily counts
+    from datetime import timedelta
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    week_start = today_start - timedelta(days=7)
+    
+    today_called = db.query(Lead).filter(Lead.is_active == True, Lead.last_called_at >= today_start).count()
+    today_answered = db.query(Call).filter(Call.started_at >= today_start, Call.status == "completed").count()
+    today_booked = db.query(Appointment).filter(Appointment.created_at >= today_start).count()
+    
+    week_called = db.query(Lead).filter(Lead.is_active == True, Lead.last_called_at >= week_start).count()
+    week_answered = db.query(Call).filter(Call.started_at >= week_start, Call.status == "completed").count()
+    week_booked = db.query(Appointment).filter(Appointment.created_at >= week_start).count()
+    
+    # Conversion rate
+    conversion_rate = 0.0
+    if today_called > 0:
+        conversion_rate = (today_booked / today_called) * 100.0
+
+    return {
+        "total_leads": total_leads,
+        "by_status": by_status,
+        "by_campaign": by_campaign,
+        "today": {"called": today_called, "answered": today_answered, "booked": today_booked},
+        "this_week": {"called": week_called, "answered": week_answered, "booked": week_booked},
+        "conversion_rate": round(conversion_rate, 2)
+    }
+
+@router.get("/sources")
+def get_lead_sources(db: Session = Depends(get_db)):
+    """Get list of all imported CSV filenames (sources) and their available unassigned lead counts"""
+    results = db.query(
+        Lead.source,
+        func.count(Lead.id).label('total'),
+        func.sum(case((Lead.campaign_id.is_(None), 1), else_=0)).label('unassigned')
+    ).filter(
+        Lead.source.isnot(None)
+    ).group_by(Lead.source).all()
+    
+    sources = []
+    for row in results:
+        sources.append({
+            "source": row.source,
+            "total": row.total,
+            "unassigned": int(row.unassigned) if row.unassigned else 0
+        })
+    return sources
+
+@router.get("/counts")
+def get_lead_counts(db: Session = Depends(get_db)):
+    """Get total lead counts for campaign creation UI including extraction date breakdowns"""
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    yesterday_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
+    yesterday_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
+
+    total = db.query(func.count(Lead.id)).filter(Lead.is_active == True).scalar() or 0
+    with_email = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != ""
+    ).scalar() or 0
+    with_phone = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.phone.isnot(None),
+        Lead.phone != ""
+    ).scalar() or 0
+    unassigned = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.campaign_id.is_(None)
+    ).scalar() or 0
+
+    extracted_today = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.created_at >= today_start
+    ).scalar() or 0
+
+    extracted_yesterday = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.created_at >= yesterday_start,
+        Lead.created_at <= yesterday_end
+    ).scalar() or 0
+
+    unsent_email_today = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.created_at >= today_start,
+        Lead.email_sent_at.is_(None)
+    ).scalar() or 0
+
+    unsent_email_yesterday = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.created_at >= yesterday_start,
+        Lead.created_at <= yesterday_end,
+        Lead.email_sent_at.is_(None)
+    ).scalar() or 0
+
+    unsent_email_all = db.query(func.count(Lead.id)).filter(
+        Lead.is_active == True,
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.email_sent_at.is_(None)
+    ).scalar() or 0
+
+    return {
+        "total": total,
+        "with_email": with_email,
+        "with_phone": with_phone,
+        "unassigned": unassigned,
+        "extracted_today": extracted_today,
+        "extracted_yesterday": extracted_yesterday,
+        "unsent_email_today": unsent_email_today,
+        "unsent_email_yesterday": unsent_email_yesterday,
+        "unsent_email_all": unsent_email_all
+    }
+
 @router.get("/")
 @router.get("")
 def get_leads(
@@ -335,225 +480,6 @@ def get_leads(
         "page": page,
         "pages": pages,
         "stats": stats
-    }
-
-@router.get("/stats/overview")
-def get_leads_overview_stats(db: Session = Depends(get_db)):
-    """Overview dashboard analytics counts"""
-    total_leads = db.query(Lead).filter(Lead.is_active == True).count()
-    
-    # By status
-    status_counts = db.query(Lead.status, func.count(Lead.id))\
-        .filter(Lead.is_active == True)\
-        .group_by(Lead.status).all()
-    by_status = {s: c for s, c in status_counts}
-    
-    # By campaign (SQLite-compatible: no Integer cast needed)
-    from sqlalchemy import case
-    campaign_rows = db.query(
-        Campaign.name,
-        func.count(Lead.id).label("total"),
-        func.sum(case((Lead.status == "meeting_booked", 1), else_=0)).label("booked")
-    ).join(Lead, Lead.campaign_id == Campaign.id)\
-     .filter(Lead.is_active == True)\
-     .group_by(Campaign.name).all()
-    
-    by_campaign = [
-        {"campaign_name": name, "total": total, "booked": int(booked or 0)}
-        for name, total, booked in campaign_rows
-    ]
-    
-    # Daily counts
-    from datetime import timedelta
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    week_start = today_start - timedelta(days=7)
-    
-    today_called = db.query(Lead).filter(Lead.is_active == True, Lead.last_called_at >= today_start).count()
-    today_answered = db.query(Call).filter(Call.started_at >= today_start, Call.status == "completed").count()
-    today_booked = db.query(Appointment).filter(Appointment.created_at >= today_start).count()
-    
-    week_called = db.query(Lead).filter(Lead.is_active == True, Lead.last_called_at >= week_start).count()
-    week_answered = db.query(Call).filter(Call.started_at >= week_start, Call.status == "completed").count()
-    week_booked = db.query(Appointment).filter(Appointment.created_at >= week_start).count()
-    
-    # Conversion rate
-    conversion_rate = 0.0
-    if today_called > 0:
-        conversion_rate = (today_booked / today_called) * 100.0
-
-    return {
-        "total_leads": total_leads,
-        "by_status": by_status,
-        "by_campaign": by_campaign,
-        "today": {"called": today_called, "answered": today_answered, "booked": today_booked},
-        "this_week": {"called": week_called, "answered": week_answered, "booked": week_booked},
-        "conversion_rate": round(conversion_rate, 2)
-    }
-
-@router.get("/sources")
-def get_lead_sources(db: Session = Depends(get_db)):
-    """Get list of all imported CSV filenames (sources) and their available unassigned lead counts"""
-    results = db.query(
-        Lead.source,
-        func.count(Lead.id).label('total'),
-        func.sum(case((Lead.campaign_id.is_(None), 1), else_=0)).label('unassigned')
-    ).filter(
-        Lead.source.isnot(None)
-    ).group_by(Lead.source).all()
-    
-    sources = []
-    for row in results:
-        sources.append({
-            "source": row.source,
-            "total": row.total,
-            "unassigned": int(row.unassigned) if row.unassigned else 0
-        })
-    return sources
-
-@router.get("/counts")
-def get_lead_counts(db: Session = Depends(get_db)):
-    """Get total lead counts for campaign creation UI including extraction date breakdowns"""
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    yesterday_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
-    yesterday_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
-
-    total = db.query(func.count(Lead.id)).filter(Lead.is_active == True).scalar() or 0
-    with_email = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.email.isnot(None),
-        Lead.email != ""
-    ).scalar() or 0
-    with_phone = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.phone.isnot(None),
-        Lead.phone != ""
-    ).scalar() or 0
-    unassigned = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.campaign_id.is_(None)
-    ).scalar() or 0
-
-    extracted_today = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.created_at >= today_start
-    ).scalar() or 0
-
-    extracted_yesterday = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.created_at >= yesterday_start,
-        Lead.created_at <= yesterday_end
-    ).scalar() or 0
-
-    unsent_email_today = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.email.isnot(None),
-        Lead.email != "",
-        Lead.created_at >= today_start,
-        Lead.email_sent_at.is_(None)
-    ).scalar() or 0
-
-    unsent_email_yesterday = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.email.isnot(None),
-        Lead.email != "",
-        Lead.created_at >= yesterday_start,
-        Lead.created_at <= yesterday_end,
-        Lead.email_sent_at.is_(None)
-    ).scalar() or 0
-
-    unsent_email_all = db.query(func.count(Lead.id)).filter(
-        Lead.is_active == True,
-        Lead.email.isnot(None),
-        Lead.email != "",
-        Lead.email_sent_at.is_(None)
-    ).scalar() or 0
-
-    return {
-        "total": total,
-        "with_email": with_email,
-        "with_phone": with_phone,
-        "unassigned": unassigned,
-        "extracted_today": extracted_today,
-        "extracted_yesterday": extracted_yesterday,
-        "unsent_email_today": unsent_email_today,
-        "unsent_email_yesterday": unsent_email_yesterday,
-        "unsent_email_all": unsent_email_all
-    }
-
-@router.get("/{lead_id}")
-def get_lead(lead_id: UUID, db: Session = Depends(get_db)):
-    """Retrieve full lead profile and linked activity history"""
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.is_active == True).first()
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-        
-    calls = db.query(Call).filter(Call.lead_id == lead_id).order_by(desc(Call.created_at)).all()
-    appointments = db.query(Appointment).filter(Appointment.lead_id == lead_id).all()
-    
-    # Compile chronological timeline list
-    timeline: List[dict] = []
-    timeline.append({
-        "type": "import",
-        "title": f"Lead imported from source: {lead.source}",
-        "time": lead.imported_at,
-        "detail": f"Imported at {lead.imported_at.strftime('%Y-%m-%d %H:%M:%S')}"
-    })
-    
-    if lead.email_sent_at:
-        timeline.append({
-            "type": "email",
-            "title": f"Outreach Email to {lead.email or 'N/A'}",
-            "time": lead.email_sent_at,
-            "detail": f"Status: {lead.email_status or 'sent'} | "
-                      f"Delivered: {lead.email_delivered_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_delivered_at else 'No'} | "
-                      f"Opened: {lead.email_opened_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_opened_at else 'No'} | "
-                      f"Clicked: {lead.email_clicked_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_clicked_at else 'No'} | "
-                      f"Bounced: {lead.email_bounced_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_bounced_at else 'No'} | "
-                      f"Blocked: {lead.email_blocked_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_blocked_at else 'No'}"
-        })
-    
-    for call in calls:
-        timeline.append({
-            "type": "call",
-            "title": f"Call attempt #{call.attempt_number} — Duration: {call.duration_seconds}s",
-            "time": call.started_at or call.created_at,
-            "detail": f"Status: {call.status} | Outcome: {call.outcome or 'Pending'}",
-            "call_id": call.id,
-            "transcript": call.transcript,
-            "ai_summary": call.ai_summary
-        })
-        
-        if call.sms_sent:
-            timeline.append({
-                "type": "sms",
-                "title": f"Confirmation SMS sent to {lead.phone}",
-                "time": call.started_at or call.created_at,
-                "detail": "SMS notification triggered automatically."
-            })
-        if call.email_sent:
-            timeline.append({
-                "type": "email",
-                "title": f"Confirmation Email sent to {lead.email or 'N/A'}",
-                "time": call.started_at or call.created_at,
-                "detail": "HTML follow-up email triggered automatically."
-            })
-            
-    for appt in appointments:
-        timeline.append({
-            "type": "appointment",
-            "title": f"Discovery meeting booked: {appt.title}",
-            "time": appt.created_at,
-            "detail": f"Meeting scheduled for {appt.meeting_date} at {appt.meeting_time} {appt.timezone}"
-        })
-        
-    # Sort timeline by time descending
-    timeline.sort(key=lambda x: x["time"], reverse=True)
-
-    return {
-        "lead": lead,
-        "calls": calls,
-        "appointments": appointments,
-        "timeline": timeline
     }
 
 @router.post("/")
@@ -820,345 +746,174 @@ async def import_leads_csv(
                 db.add(lead)
                 imported_email += 1
 
-        except Exception as exc:
+        except Exception as row_err:
             errors += 1
+            continue
 
     db.commit()
 
-    total_imported = imported_phone + imported_email
-    result: dict = {
-        "imported": total_imported,
+    return {
         "imported_phone": imported_phone,
         "imported_email": imported_email,
         "skipped_duplicate": skipped_duplicate,
         "skipped_dnc": skipped_dnc,
-        "errors": errors
+        "errors": errors,
+        "total_imported": imported_phone + imported_email
     }
-
-    if imported_email > 0 and imported_phone == 0:
-        result["info"] = "email_only"
-        result["message"] = (
-            f"\u2705 Imported {imported_email} email contacts for Email Outreach. "
-            "These leads have no phone number so they cannot be called, but are visible in the Leads page."
-        )
-    elif imported_email > 0 and imported_phone > 0:
-        result["message"] = (
-            f"\u2705 Imported {imported_phone} callable leads + {imported_email} email-only contacts."
-        )
-
-    return result
-
-
-
-@router.post("/{lead_id}/approve")
-def approve_lead(lead_id: UUID, db: Session = Depends(get_db)):
-    """Approve a lead for human-in-the-loop LinkedIn outreach"""
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.is_active == True).first()
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-        
-    if lead.linkedin_status == "pending_approval":
-        lead.linkedin_status = "approved"  # type: ignore
-        db.commit()
-        db.refresh(lead)
-        return {"message": "Lead approved for outreach", "linkedin_status": lead.linkedin_status}
-    else:
-        raise HTTPException(status_code=400, detail=f"Lead cannot be approved from current state: {lead.linkedin_status}")
-
 
 @router.patch("/{lead_id}")
 def update_lead(
     lead_id: UUID,
+    full_name: Optional[str] = None,
+    business_name: Optional[str] = None,
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    website: Optional[str] = None,
+    business_type: Optional[str] = None,
+    city: Optional[str] = None,
+    state: Optional[str] = None,
     status: Optional[str] = None,
     priority: Optional[str] = None,
+    campaign_id: Optional[UUID] = None,
     internal_notes: Optional[str] = None,
-    next_call_at: Optional[datetime] = None,
-    assigned_to: Optional[str] = None,
+    is_dnc: Optional[bool] = None,
+    linkedin_url: Optional[str] = None,
+    facebook_url: Optional[str] = None,
+    instagram_url: Optional[str] = None,
+    twitter_url: Optional[str] = None,
+    youtube_url: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Update CRM parameters of a specific lead"""
+    """Update a lead's profile fields"""
     lead = db.query(Lead).filter(Lead.id == lead_id, Lead.is_active == True).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-        
+    
+    if full_name is not None:
+        lead.full_name = full_name  # type: ignore
+    if business_name is not None:
+        lead.business_name = business_name  # type: ignore
+    if phone is not None:
+        lead.phone = phone  # type: ignore
+    if email is not None:
+        lead.email = email  # type: ignore
+    if website is not None:
+        lead.website = website  # type: ignore
+    if business_type is not None:
+        lead.business_type = business_type  # type: ignore
+    if city is not None:
+        lead.city = city  # type: ignore
+    if state is not None:
+        lead.state = state  # type: ignore
     if status is not None:
         lead.status = status  # type: ignore
     if priority is not None:
         lead.priority = priority  # type: ignore
+    if campaign_id is not None:
+        lead.campaign_id = campaign_id  # type: ignore
     if internal_notes is not None:
         lead.internal_notes = internal_notes  # type: ignore
-    if next_call_at is not None:
-        lead.next_call_at = next_call_at  # type: ignore
-    if assigned_to is not None:
-        lead.assigned_to = assigned_to
-        
+    if is_dnc is not None:
+        lead.is_dnc = is_dnc  # type: ignore
+    if linkedin_url is not None:
+        lead.linkedin_url = linkedin_url  # type: ignore
+    if facebook_url is not None:
+        lead.facebook_url = facebook_url  # type: ignore
+    if instagram_url is not None:
+        lead.instagram_url = instagram_url  # type: ignore
+    if twitter_url is not None:
+        lead.twitter_url = twitter_url  # type: ignore
+    if youtube_url is not None:
+        lead.youtube_url = youtube_url  # type: ignore
+
     db.commit()
     db.refresh(lead)
     return lead
 
 @router.delete("/{lead_id}")
 def delete_lead(lead_id: UUID, db: Session = Depends(get_db)):
-    """Soft delete lead"""
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    """Soft-delete a lead (sets is_active = False)"""
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.is_active == True).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     lead.is_active = False  # type: ignore
     db.commit()
-    return {"message": "Lead soft deleted successfully"}
+    return {"message": "Lead deleted successfully"}
 
-@router.post("/{lead_id}/notes")
-def add_lead_note(lead_id: UUID, note: str = Query(...), db: Session = Depends(get_db)):
-    """Append timed note to lead internal notes"""
+# ─── DYNAMIC ROUTE LAST — must come after all static routes ───────────────────
+
+@router.get("/{lead_id}")
+def get_lead(lead_id: UUID, db: Session = Depends(get_db)):
+    """Retrieve full lead profile and linked activity history"""
     lead = db.query(Lead).filter(Lead.id == lead_id, Lead.is_active == True).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
         
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    formatted_note = f"\n[{timestamp}] {note}"
+    calls = db.query(Call).filter(Call.lead_id == lead_id).order_by(desc(Call.created_at)).all()
+    appointments = db.query(Appointment).filter(Appointment.lead_id == lead_id).all()
     
-    if lead.internal_notes:
-        lead.internal_notes += formatted_note  # type: ignore
-    else:
-        lead.internal_notes = formatted_note.strip()  # type: ignore
+    # Compile chronological timeline list
+    timeline: List[dict] = []
+    timeline.append({
+        "type": "import",
+        "title": f"Lead imported from source: {lead.source}",
+        "time": lead.imported_at,
+        "detail": f"Imported at {lead.imported_at.strftime('%Y-%m-%d %H:%M:%S')}"
+    })
+    
+    if lead.email_sent_at:
+        timeline.append({
+            "type": "email",
+            "title": f"Outreach Email to {lead.email or 'N/A'}",
+            "time": lead.email_sent_at,
+            "detail": f"Status: {lead.email_status or 'sent'} | "
+                      f"Delivered: {lead.email_delivered_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_delivered_at else 'No'} | "
+                      f"Opened: {lead.email_opened_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_opened_at else 'No'} | "
+                      f"Clicked: {lead.email_clicked_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_clicked_at else 'No'} | "
+                      f"Bounced: {lead.email_bounced_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_bounced_at else 'No'} | "
+                      f"Blocked: {lead.email_blocked_at.strftime('%Y-%m-%d %H:%M:%S') if lead.email_blocked_at else 'No'}"
+        })
+    
+    for call in calls:
+        timeline.append({
+            "type": "call",
+            "title": f"Call attempt #{call.attempt_number} — Duration: {call.duration_seconds}s",
+            "time": call.started_at or call.created_at,
+            "detail": f"Status: {call.status} | Outcome: {call.outcome or 'Pending'}",
+            "call_id": call.id,
+            "transcript": call.transcript,
+            "ai_summary": call.ai_summary
+        })
         
-    db.commit()
-    db.refresh(lead)
-    return lead
-
-# ─── SCREENSHOT DETAILS EXTRACTOR INTEGRATION ───
-
-RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "business_name": {
-            "type": "string",
-            "description": "The name of the business/company. Strip trailing numbers or CIDs."
-        },
-        "website": {
-            "type": "string",
-            "description": "The business website domain."
-        },
-        "poc_name": {
-            "type": "string",
-            "description": "Person of contact names. If multiple, separate with a comma."
-        },
-        "phone_number": {
-            "type": "string",
-            "description": "Phone numbers. If multiple, separate with a comma."
-        },
-        "email": {
-            "type": "string",
-            "description": "Email addresses. If multiple, separate with a comma."
-        },
-        "google_ads_account_cid": {
-            "type": "string",
-            "description": "The 9 or 10 digit Google Ads Customer ID (CID). If not found, use '--'."
-        },
-        "last_spoken_google_wrap_name": {
-            "type": "string",
-            "description": "The name of the Google representative who last made contact."
-        },
-        "remarks": {
-            "type": "string",
-            "description": "Any relevant team notes or call remarks."
-        }
-    },
-    "required": [
-        "business_name",
-        "website",
-        "poc_name",
-        "phone_number",
-        "email",
-        "google_ads_account_cid",
-        "last_spoken_google_wrap_name",
-        "remarks"
-    ]
-}
-
-SYSTEM_INSTRUCTION = """
-You are a precise data extraction assistant. Your task is to extract lead details from screenshots of a Google Ads CRM interface.
-Analyze the screenshot carefully. Note that the image may be rotated sideways; read the text in whatever orientation it appears.
-Extract fields precisely.
-"""
-
-@router.post("/extract-screenshots")
-async def extract_lead_from_screenshots(
-    files: List[UploadFile] = File(...),
-    campaign_id: Optional[UUID] = Query(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Accept multiple screenshot images, call Gemini to extract structured lead details, 
-    merge duplicates, and save to database.
-    """
-    from app.core.config import get_settings
-    from PIL import Image
-    import json
-    from google import genai
-    from google.genai import types
-    from app.core.websocket import websocket_manager
-    
-    settings = get_settings()
-    api_key = settings.GEMINI_API_KEY
-    
-    if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="GEMINI_API_KEY is not configured in backend settings. Please set it in your .env file."
-        )
-        
-    client = genai.Client(api_key=api_key)
-    
-    success_count = 0
-    errors_count = 0
-    results = []
-    
-    for upload_file in files:
-        try:
-            # Read and verify image
-            contents = await upload_file.read()
-            image = Image.open(io.BytesIO(contents))
-            
-            # Send to Gemini
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[  # type: ignore
-                    "Extract all available lead details from this Google Ads CRM screenshot.",
-                    image
-                ],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=RESPONSE_SCHEMA,
-                    system_instruction=SYSTEM_INSTRUCTION
-                )
-            )
-            
-            if not response.text:
-                errors_count += 1
-                continue
-                
-            data = json.loads(response.text)
-            
-            business = str(data.get("business_name", "")).strip()
-            website = str(data.get("website", "")).strip()
-            poc = str(data.get("poc_name", "")).strip()
-            phone_raw = str(data.get("phone_number", "")).strip()
-            email = str(data.get("email", "")).strip()
-            cid = str(data.get("google_ads_account_cid", "")).strip()
-            google_rep = str(data.get("last_spoken_google_wrap_name", "")).strip()
-            remarks = str(data.get("remarks", "")).strip()
-            
-            if not business and not phone_raw:
-                errors_count += 1
-                continue
-                
-            # Smart phone cleaning and formatting for the first phone number
-            formatted_phone = "+1000000000"
-            first_phone = phone_raw.split(",")[0].strip()
-            digits = ''.join(filter(str.isdigit, first_phone))
-            if digits:
-                if len(digits) == 10:
-                    formatted_phone = f"+1{digits}"
-                else:
-                    formatted_phone = f"+{digits}"
-            
-            # Look for existing lead
-            existing = None
-            if formatted_phone != "+1000000000":
-                existing = db.query(Lead).filter(
-                    Lead.phone == formatted_phone,
-                    Lead.is_active == True
-                ).first()
-                
-            if not existing and business:
-                business_lower = business.lower()
-                existing = db.query(Lead).filter(
-                    Lead.business_name.ilike(business_lower),
-                    Lead.is_active == True
-                ).first()
-                
-            if existing:
-                # Merge details
-                if not existing.full_name and poc:
-                    existing.full_name = poc  # type: ignore
-                if email:
-                    existing.email = email if not existing.email else f"{existing.email}, {email}"  # type: ignore
-                
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                notes_addon = f"[AI Screenshot Extraction - {timestamp}]\n"
-                if cid and cid != "--":
-                    notes_addon += f"- Google Ads CID: {cid}\n"
-                if google_rep:
-                    notes_addon += f"- Last Google Rep: {google_rep}\n"
-                if phone_raw:
-                    notes_addon += f"- Extracted Phone(s): {phone_raw}\n"
-                if remarks:
-                    notes_addon += f"- Remarks: {remarks}\n"
-                
-                if existing.internal_notes:
-                    existing.internal_notes = notes_addon + "\n" + existing.internal_notes  # type: ignore
-                else:
-                    existing.internal_notes = notes_addon  # type: ignore
-                    
-                db.commit()
-                results.append({
-                    "business_name": business,
-                    "status": "merged",
-                    "lead_id": str(existing.id),
-                    "website": website or existing.website,
-                    "email": email or existing.email
-                })
-            else:
-                # Create new lead
-                notes_body = f"[AI Screenshot Extraction]\n"
-                if cid and cid != "--":
-                    notes_body += f"- Google Ads CID: {cid}\n"
-                if google_rep:
-                    notes_body += f"- Last Google Rep: {google_rep}\n"
-                if phone_raw:
-                    notes_body += f"- Extracted Phone(s): {phone_raw}\n"
-                if remarks:
-                    notes_body += f"- Remarks: {remarks}\n"
-                    
-                new_lead = Lead(
-                    full_name=poc or "Prospect Name",
-                    business_name=business or "Business Name",
-                    phone=formatted_phone,
-                    email=email or None,
-                    website=website or None,
-                    campaign_id=campaign_id,
-                    source=f"screenshot_{upload_file.filename[:30]}" if upload_file.filename else "screenshot_extraction",
-                    internal_notes=notes_body,
-                    status="pending"
-                )
-                db.add(new_lead)
-                db.commit()
-                db.refresh(new_lead)
-                results.append({
-                    "business_name": business,
-                    "status": "created",
-                    "lead_id": str(new_lead.id),
-                    "website": website,
-                    "email": email
-                })
-                
-            success_count += 1
-            
-            # Broadcast WebSocket notification so the CRM UI updates live
-            await websocket_manager.broadcast({
-                "event": "lead_status_updated",
-                "lead_id": results[-1]["lead_id"],
-                "status": "pending",
-                "business_name": business
+        if call.sms_sent:
+            timeline.append({
+                "type": "sms",
+                "title": f"Confirmation SMS sent to {lead.phone}",
+                "time": call.started_at or call.created_at,
+                "detail": "SMS notification triggered automatically."
+            })
+        if call.email_sent:
+            timeline.append({
+                "type": "email",
+                "title": f"Confirmation Email sent to {lead.email or 'N/A'}",
+                "time": call.started_at or call.created_at,
+                "detail": "HTML follow-up email triggered automatically."
             })
             
-        except Exception as e:
-            errors_count += 1
-            
+    for appt in appointments:
+        timeline.append({
+            "type": "appointment",
+            "title": f"Discovery meeting booked: {appt.title}",
+            "time": appt.created_at,
+            "detail": f"Meeting scheduled for {appt.meeting_date} at {appt.meeting_time} {appt.timezone}"
+        })
+        
+    # Sort timeline by time descending
+    timeline.sort(key=lambda x: x["time"], reverse=True)
+
     return {
-        "success": True,
-        "processed": len(files),
-        "imported": success_count,
-        "errors": errors_count,
-        "results": results
+        "lead": lead,
+        "calls": calls,
+        "appointments": appointments,
+        "timeline": timeline
     }

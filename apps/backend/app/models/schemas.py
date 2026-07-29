@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -33,7 +33,8 @@ class ContactCreate(BaseModel):
     name: Optional[str] = Field(None, description="Contact name")
     company: Optional[str] = Field(None, description="Contact company")
 
-    @validator('phone_number')
+    @field_validator('phone_number')
+    @classmethod
     def validate_phone(cls, v):
         if not v:
             raise ValueError('Phone number is required')
