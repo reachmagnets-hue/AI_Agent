@@ -150,6 +150,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     today_ist_midnight_utc = datetime.combine(now_ist.date(), datetime.min.time(), tzinfo=ist_tz).astimezone(dt_timezone.utc).replace(tzinfo=None)
     today_dt = today_ist_midnight_utc  # naive UTC datetime representing IST day start
     today_str = now_ist.strftime("%Y-%m-%d")
+    yesterday_str = (now_ist.date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     total_contacts = db.query(Lead).filter(Lead.is_active == True).count()
     leads_today = db.query(Lead).filter(
@@ -159,6 +160,13 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             cast(Lead.imported_at, String).like(f"{today_str}%")
         )
     ).count()
+    leads_yesterday = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(
+            cast(Lead.created_at, String).like(f"{yesterday_str}%"),
+            cast(Lead.imported_at, String).like(f"{yesterday_str}%")
+        )
+    ).count()
     total_campaigns = db.query(Campaign).count()
     total_calls = db.query(Call).count()
     calls_today = db.query(Call).filter(
@@ -166,6 +174,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             Call.created_at >= today_dt,
             cast(Call.created_at, String).like(f"{today_str}%")
         )
+    ).count()
+    calls_yesterday = db.query(Call).filter(
+        cast(Call.created_at, String).like(f"{yesterday_str}%")
     ).count()
     failed_calls = db.query(Call).filter(Call.status.in_(["failed", "busy", "no-answer"])).count()
     pending_calls = db.query(Lead).filter(Lead.is_active == True, Lead.status == "pending").count()
@@ -190,6 +201,10 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             Lead.email_sent_at >= today_dt,
             cast(Lead.email_sent_at, String).like(f"{today_str}%")
         )
+    ).count()
+    email_sent_yesterday = db.query(Lead).filter(
+        Lead.is_active == True,
+        cast(Lead.email_sent_at, String).like(f"{yesterday_str}%")
     ).count()
     email_bounced = db.query(Lead).filter(
         Lead.is_active == True,
@@ -232,6 +247,10 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             cast(Lead.linkedin_sent_at, String).like(f"{today_str}%")
         )
     ).count()
+    linkedin_sent_yesterday = db.query(Lead).filter(
+        Lead.is_active == True,
+        cast(Lead.linkedin_sent_at, String).like(f"{yesterday_str}%")
+    ).count()
     linkedin_connected = db.query(Lead).filter(
         Lead.is_active == True,
         Lead.linkedin_status.in_(["connected", "message_sent", "meeting_scheduled"])
@@ -243,6 +262,23 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     linkedin_replied = db.query(Lead).filter(
         Lead.is_active == True,
         Lead.linkedin_status == "meeting_scheduled"
+    ).count()
+
+    # 🔍 Extraction & Directory Enrichment Metrics
+    directories_extracted = db.query(Lead).filter(
+        Lead.internal_notes.like("%[Directories]%")
+    ).count()
+    leads_with_emails = db.query(Lead).filter(
+        Lead.email.isnot(None), Lead.email != ""
+    ).count()
+    leads_with_socials = db.query(Lead).filter(
+        or_(
+            Lead.facebook_url.isnot(None),
+            Lead.instagram_url.isnot(None),
+            Lead.linkedin_url.isnot(None),
+            Lead.twitter_url.isnot(None),
+            Lead.youtube_url.isnot(None)
+        )
     ).count()
 
     # 📅 Overall Bookings
@@ -257,15 +293,18 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     return {
         "totalContacts": total_contacts,
         "leadsToday": leads_today,
+        "leadsYesterday": leads_yesterday,
         "totalCampaigns": total_campaigns,
         "totalCalls": total_calls,
         "callsToday": calls_today,
+        "callsYesterday": calls_yesterday,
         "successRate": success_rate,
         "pendingCalls": pending_calls,
         "failedCalls": failed_calls,
         # Email Metrics
         "emailSent": email_sent,
         "emailSentToday": email_sent_today,
+        "emailSentYesterday": email_sent_yesterday,
         "emailDelivered": email_delivered,
         "emailOpened": email_opened,
         "emailClicked": email_clicked,
@@ -277,9 +316,14 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         # LinkedIn Metrics
         "linkedinSent": linkedin_sent,
         "linkedinSentToday": linkedin_sent_today,
+        "linkedinSentYesterday": linkedin_sent_yesterday,
         "linkedinConnected": linkedin_connected,
         "linkedinMessagesSent": linkedin_messages_sent,
         "linkedinReplied": linkedin_replied,
+        # Extraction & Enrichment Metrics
+        "directoriesExtracted": directories_extracted,
+        "leadsWithEmails": leads_with_emails,
+        "leadsWithSocials": leads_with_socials,
         # Bookings Metrics
         "totalBookings": total_bookings,
         "bookingsToday": bookings_today
