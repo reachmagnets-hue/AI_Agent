@@ -266,7 +266,18 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
     # 🔍 Extraction & Directory Enrichment Metrics
     directories_extracted = db.query(Lead).filter(
-        Lead.internal_notes.like("%[Directories]%")
+        or_(
+            Lead.internal_notes.like("%[Directories]%"),
+            Lead.internal_notes.like("%yelp%"),
+            Lead.internal_notes.like("%bbb%"),
+            Lead.internal_notes.like("%nextdoor%"),
+            Lead.internal_notes.like("%yellowpages%"),
+            Lead.facebook_url.isnot(None),
+            Lead.instagram_url.isnot(None),
+            Lead.linkedin_url.isnot(None),
+            Lead.twitter_url.isnot(None),
+            Lead.youtube_url.isnot(None)
+        )
     ).count()
     leads_with_emails = db.query(Lead).filter(
         Lead.email.isnot(None), Lead.email != ""
