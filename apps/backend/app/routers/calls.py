@@ -292,6 +292,15 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         )
     ).count()
 
+    total_extracted = db.query(Lead).filter(
+        Lead.is_active == True,
+        or_(
+            Lead.source.in_(["google_maps_scrape", "linkedin_scraper", "scraper"]),
+            Lead.internal_notes.like("%scraped%"),
+            Lead.internal_notes.like("%extracted%")
+        )
+    ).count()
+
     # 📅 Overall Bookings
     total_bookings = db.query(Appointment).count()
     bookings_today = db.query(Appointment).filter(
@@ -333,6 +342,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         "linkedinReplied": linkedin_replied,
         # Extraction & Enrichment Metrics
         "directoriesExtracted": directories_extracted,
+        "totalExtracted": total_extracted,
         "leadsWithEmails": leads_with_emails,
         "leadsWithSocials": leads_with_socials,
         # Bookings Metrics
