@@ -15,9 +15,7 @@ settings = get_settings_lazy()
 # SQLAlchemy Setup
 Base = declarative_base()
 
-from sqlalchemy import or_, text
-
-import uuid
+from sqlalchemy import cast, String
 
 def uuid_match(col, target_uuid):
     """Helper to match UUID columns across PostgreSQL, SQLite string with hyphens, and SQLite hex formats"""
@@ -30,11 +28,11 @@ def uuid_match(col, target_uuid):
         val_hyphen = str(u_obj)
         return or_(
             col == u_obj,
-            col == val_hyphen,
-            col == val_hex
+            cast(col, String) == val_hex,
+            cast(col, String) == val_hyphen
         )
     except Exception:
-        return col == val_str
+        return cast(col, String) == val_str
 
 import os
 
