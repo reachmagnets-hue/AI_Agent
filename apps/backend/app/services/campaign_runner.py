@@ -217,8 +217,11 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                                 db_item.status = "called" if success else "failed"  # type: ignore
                                 db_update.commit()
                             
-                            from app.core.scheduler import scheduler
-                            scheduler.record_email_sent()
+                            try:
+                                from app.core.scheduler import scheduler
+                                scheduler.record_email_sent()
+                            except Exception:
+                                pass
                             logger.info("Email outreach complete for lead", lead_id=str(lead_id), success=success)
                         else:
                             db_item.status = "failed"  # type: ignore

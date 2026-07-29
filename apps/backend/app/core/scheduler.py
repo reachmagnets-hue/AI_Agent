@@ -81,6 +81,10 @@ class MasterAutonomousScheduler:
         self.nightly_emails_sent = 0
         self.current_night_date = ""
 
+    def record_email_sent(self):
+        """Increments nightly email counter"""
+        self.nightly_emails_sent += 1
+
     async def _scheduler_loop(self):
         from app.core.config import get_settings
         logger.info("🚀 World-Class Master Autonomous Scheduler Initialized")
