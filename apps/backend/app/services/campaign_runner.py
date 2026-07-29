@@ -196,9 +196,14 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 if not lead:
                     logger.info("No more pending leads found for campaign", campaign_id=str(campaign_id))
                     if not is_email:
-                        setattr(campaign, "status", "completed")
-                        setattr(campaign, "completed_at", datetime.now(timezone.utc))
-                        db.commit()
+                        try:
+                            db.query(Campaign).filter(uuid_match(Campaign.id, campaign_id)).update({
+                                "status": "completed",
+                                "completed_at": datetime.now(timezone.utc)
+                            }, synchronize_session=False)
+                            db.commit()
+                        except Exception as err:
+                            logger.warning("Could not set campaign status to completed", campaign_id=str(campaign_id), error=str(err))
                     break
                     
                 lead_id = cast(Any, lead.id)
