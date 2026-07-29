@@ -64,6 +64,7 @@ class Settings(BaseSettings):
 
     LINKEDIN_SESSION_COOKIE: Optional[str] = None
     LINKEDIN_DAILY_LIMIT: int = 100
+    SIMULATE_LINKEDIN: bool = False
 
     # Application URLs
     FRONTEND_URL: str = "http://localhost:3000"

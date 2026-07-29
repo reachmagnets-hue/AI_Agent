@@ -118,20 +118,21 @@ class MasterAutonomousScheduler:
                 continue
 
             # ---------------------------------------------------------------
-            # 🔍 1. EXTRACTION WINDOW: 24/7 (Every 2 Hours)
+            # 🔍 1. EXTRACTION WINDOW: 06:00 AM - 06:00 PM (1-hr ON / 1-hr REST)
             # ---------------------------------------------------------------
-            if current_hour % 2 == 0:
-                if current_hour != self.last_extraction_hour:
-                    self.last_extraction_hour = current_hour
-                    logger.info("⏰ Extraction Window Active. Triggering multi-location extraction...", hour=current_hour, target_per_run=MAX_LEADS_PER_EXTRACTION)
-                    asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
+            if 6 <= current_hour < 18:
+                if current_hour % 2 == 0:
+                    if current_hour != self.last_extraction_hour:
+                        self.last_extraction_hour = current_hour
+                        logger.info("⏰ Extraction Window Active (06:00 AM - 06:00 PM IST). Triggering multi-location extraction...", hour=current_hour, target_per_run=MAX_LEADS_PER_EXTRACTION)
+                        asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
 
             # ---------------------------------------------------------------
             # 📧 2. EMAIL OUTREACH WINDOW: 06:00 PM - 06:00 AM (Max 450/night, 45s delay)
             # ---------------------------------------------------------------
             if current_hour >= 18 or current_hour < 6:
                 if self.nightly_emails_sent < MAX_NIGHTLY_EMAILS:
-                    logger.info("📧 Email Outreach Window Active (6 PM - 6 AM). Running email campaign worker...", hour=current_hour, sent_tonight=self.nightly_emails_sent, max_cap=MAX_NIGHTLY_EMAILS)
+                    logger.info("📧 Email Outreach Window Active (6 PM - 6 AM IST). Running email campaign worker...", hour=current_hour, sent_tonight=self.nightly_emails_sent, max_cap=MAX_NIGHTLY_EMAILS)
                     try:
                         await run_active_campaigns()
                     except Exception as e:
@@ -141,10 +142,11 @@ class MasterAutonomousScheduler:
                         logger.info(f"🛑 Nightly email limit reached ({self.nightly_emails_sent}/{MAX_NIGHTLY_EMAILS}). Pausing emails until 6 PM tomorrow.")
 
             # ---------------------------------------------------------------
-            # 📞 3. VOICE CALLING WINDOW: 08:00 PM - 04:00 AM
+            # 📞 3. VOICE CALLING WINDOWS: 8 PM-10 PM IST, 12 AM-1 AM IST, 3 AM-4 AM IST
             # ---------------------------------------------------------------
-            if current_hour >= 20 or current_hour < 4:
-                logger.info("📞 Voice Calling Window Active (8 PM - 4 AM). Triggering active voice campaigns...", hour=current_hour)
+            is_call_window = (20 <= current_hour < 22) or (0 <= current_hour < 1) or (3 <= current_hour < 4)
+            if is_call_window:
+                logger.info("📞 Voice Calling Window Active (Designated Call Windows). Triggering active voice campaigns...", hour=current_hour)
                 try:
                     await run_active_campaigns()
                 except Exception as e:
