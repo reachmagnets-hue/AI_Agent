@@ -17,23 +17,24 @@ Base = declarative_base()
 
 from sqlalchemy import or_, text
 
+import uuid
+
 def uuid_match(col, target_uuid):
     """Helper to match UUID columns across PostgreSQL, SQLite string with hyphens, and SQLite hex formats"""
     if target_uuid is None:
         return col.is_(None)
     val_str = str(target_uuid).lower().strip()
     val_hex = val_str.replace('-', '')
-    if len(val_hex) == 32:
-        val_hyphen = f"{val_hex[:8]}-{val_hex[8:12]}-{val_hex[12:16]}-{val_hex[16:20]}-{val_hex[20:]}"
-    else:
-        val_hyphen = val_str
-
-    return or_(
-        col == target_uuid,
-        col == val_str,
-        col == val_hex,
-        col == val_hyphen
-    )
+    try:
+        u_obj = uuid.UUID(val_hex)
+        val_hyphen = str(u_obj)
+        return or_(
+            col == u_obj,
+            col == val_hyphen,
+            col == val_hex
+        )
+    except Exception:
+        return col == val_str
 
 import os
 
