@@ -158,19 +158,33 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 # Pull next pending lead (excluding bounced leads)
                 from sqlalchemy import or_ as sa_or_
                 if is_email:
-                    lead = db.query(Lead).filter(
-                        uuid_match(Lead.campaign_id, campaign_id),
-                        Lead.email_sent_at.is_(None),
-                        Lead.email.isnot(None),
-                        Lead.email != "",
-                        Lead.is_dnc == False,
-                        Lead.is_active == True,
-                        sa_or_(
-                            Lead.email_status.is_(None),
-                            Lead.email_status != "bounced"
-                        ),
-                        Lead.email_bounced_at.is_(None)
-                    ).order_by(Lead.created_at).first()
+                    if camp_name.lower().strip() in ["all_email", "all_email ", "e mail", "email", "all email"]:
+                        lead = db.query(Lead).filter(
+                            Lead.email_sent_at.is_(None),
+                            Lead.email.isnot(None),
+                            Lead.email != "",
+                            Lead.is_dnc == False,
+                            Lead.is_active == True,
+                            sa_or_(
+                                Lead.email_status.is_(None),
+                                Lead.email_status != "bounced"
+                            ),
+                            Lead.email_bounced_at.is_(None)
+                        ).order_by(Lead.created_at).first()
+                    else:
+                        lead = db.query(Lead).filter(
+                            uuid_match(Lead.campaign_id, campaign_id),
+                            Lead.email_sent_at.is_(None),
+                            Lead.email.isnot(None),
+                            Lead.email != "",
+                            Lead.is_dnc == False,
+                            Lead.is_active == True,
+                            sa_or_(
+                                Lead.email_status.is_(None),
+                                Lead.email_status != "bounced"
+                            ),
+                            Lead.email_bounced_at.is_(None)
+                        ).order_by(Lead.created_at).first()
                 else:
                     lead = db.query(Lead).filter(
                         uuid_match(Lead.campaign_id, campaign_id),
