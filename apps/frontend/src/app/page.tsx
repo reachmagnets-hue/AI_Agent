@@ -340,6 +340,7 @@ export default function Dashboard() {
                 </div>
                 <div className="text-2xl font-black text-amber-300">{(displayStats.bookingsToday || 0).toLocaleString()} <span className="text-xs font-normal text-amber-200">Booked</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Direct Meetings</div>
+              </div>
             </div>
           </div>
 
