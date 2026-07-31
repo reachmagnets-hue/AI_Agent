@@ -1,6 +1,7 @@
 import asyncio
 import random
 import structlog
+from sqlalchemy import or_
 from datetime import datetime, timezone
 from typing import Dict, Any
 from uuid import UUID
@@ -53,8 +54,12 @@ async def send_linkedin_campaign(campaign_id: str, limit: int = 30, force_simula
             
         query = db.query(Lead).filter(
             Lead.linkedin_url.isnot(None),
+            Lead.linkedin_url != "",
             Lead.is_active == True,
-            Lead.linkedin_status.in_(['approved', 'pending_approval', 'pending'])
+            or_(
+                Lead.linkedin_status.is_(None),
+                Lead.linkedin_status.in_(['approved', 'pending_approval', 'pending', 'uncontacted'])
+            )
         )
         if campaign_id:
             cid = UUID(campaign_id) if isinstance(campaign_id, str) else campaign_id
@@ -117,7 +122,7 @@ async def run_playwright_campaign(cookie: str, lead_ids: list, remaining_actions
                 db = SessionLocal()
                 try:
                     lead = db.query(Lead).filter(Lead.id == lid).first()
-                    if not lead or lead.linkedin_status not in ['approved', 'pending_approval', 'pending']:
+                    if not lead or (lead.linkedin_status is not None and lead.linkedin_status not in ['approved', 'pending_approval', 'pending', 'uncontacted']):
                         continue
 
                     # Auto-generate personalized message if missing
@@ -332,7 +337,7 @@ async def run_simulated_campaign(lead_ids: list, remaining_actions: int) -> Dict
         db = SessionLocal()
         try:
             lead = db.query(Lead).filter(Lead.id == lid).first()
-            if lead and lead.linkedin_status in ['approved', 'pending_approval']:
+            if lead and (lead.linkedin_status is None or lead.linkedin_status in ['approved', 'pending_approval', 'pending', 'uncontacted']):
                 lead.linkedin_status = 'connection_sent' # type: ignore
                 lead.linkedin_sent_at = datetime.now(timezone.utc) # type: ignore
                 logger.info("SIMULATED OUTREACH: Connection request sent", to=lead.full_name)
@@ -397,11 +402,19 @@ async def run_simulated_hourly_tasks():
 async def process_hourly_linkedin_tasks():
     """
     Runs every hour to:
-    1. Check acceptances for connection_sent leads.
-    2. Send messages to connected leads.
-    3. Read inbox for replies and use AI to schedule meetings.
+    1. Dispatch pending connection requests up to daily cap (30/day).
+    2. Check acceptances for connection_sent leads.
+    3. Send messages to connected leads.
+    4. Read inbox for replies and use AI to schedule meetings.
     """
     logger.info("process_hourly_linkedin_tasks: Starting hourly routine")
+    
+    # 1. Send new connection requests for pending leads
+    try:
+        await send_linkedin_campaign(campaign_id="")
+    except Exception as camp_err:
+        logger.error("Error in automated LinkedIn campaign dispatch", error=str(camp_err))
+
     settings = get_settings()
     cookie = settings.LINKEDIN_SESSION_COOKIE
     
