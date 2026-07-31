@@ -10,7 +10,7 @@ __pycache__/
 .env
 .env.local
 .DS_Store
-# reachmagnets.db
-reachmagnets.db-shm
-reachmagnets.db-wal
+*.db
+*.db-shm
+*.db-wal
 *.html
