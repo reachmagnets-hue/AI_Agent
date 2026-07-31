@@ -503,6 +503,18 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                         # Save new lead directly to Database
                         db_item = SessionLocal()
                         try:
+                            # Auto-resolve target campaign ID if not specified
+                            target_campaign_id = campaign_id
+                            if not target_campaign_id:
+                                if lead_data["email"]:
+                                    active_email_camp = db_item.query(Campaign).filter(Campaign.campaign_type == "email", Campaign.status == "active").first()
+                                    if active_email_camp:
+                                        target_campaign_id = active_email_camp.id
+                                elif lead_data["phone"]:
+                                    active_call_camp = db_item.query(Campaign).filter(Campaign.campaign_type == "call", Campaign.status == "active").first()
+                                    if active_call_camp:
+                                        target_campaign_id = active_call_camp.id
+
                             new_lead = Lead(
                                 id=uuid4(),
                                 full_name=lead_data["name"],
@@ -518,7 +530,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                                 rating=lead_data["rating"],
                                 description=lead_data["description"],
                                 business_type=industry,
-                                campaign_id=campaign_id,
+                                campaign_id=target_campaign_id,
                                 source="google_maps_scrape",
                                 status="pending",
                                 internal_notes=f"Full Address: {lead_data['address'] or 'N/A'}{dir_str}"
