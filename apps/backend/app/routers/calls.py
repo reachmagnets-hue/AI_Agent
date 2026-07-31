@@ -321,7 +321,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     ).count()
 
     # ── LAST ACTIVE DAY fallback ──────────────────────────────────────────────
-    # When today shows 0, find the most recent day with real data.
+    # When yesterday shows 0, find the most recent day prior to today with real data.
     # Uses IST-offset adjusted dates stored as UTC naive strings.
     last_active_leads_date  = None
     last_active_leads_count = 0
@@ -330,41 +330,48 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     last_active_calls_date  = None
     last_active_calls_count = 0
 
-    if leads_today == 0:
-        # Find most recent day with any lead; convert UTC date back to IST date
+    today_str_ist = now_ist.strftime("%Y-%m-%d")
+
+    if leads_yesterday == 0:
         row = db.execute(
             text("""
                 SELECT date(datetime(created_at, '+5 hours', '+30 minutes')) as d,
                        count(*) as c
                 FROM leads WHERE is_active=1 AND created_at IS NOT NULL
+                  AND date(datetime(created_at, '+5 hours', '+30 minutes')) < :today_str
                 GROUP BY d ORDER BY d DESC LIMIT 1
-            """)
+            """),
+            {"today_str": today_str_ist}
         ).fetchone()
         if row:
             last_active_leads_date  = row[0]
             last_active_leads_count = row[1]
 
-    if email_sent_today == 0:
+    if email_sent_yesterday == 0:
         row = db.execute(
             text("""
                 SELECT date(datetime(email_sent_at, '+5 hours', '+30 minutes')) as d,
                        count(*) as c
                 FROM leads WHERE email_sent_at IS NOT NULL AND is_active=1
+                  AND date(datetime(email_sent_at, '+5 hours', '+30 minutes')) < :today_str
                 GROUP BY d ORDER BY d DESC LIMIT 1
-            """)
+            """),
+            {"today_str": today_str_ist}
         ).fetchone()
         if row:
             last_active_email_date  = row[0]
             last_active_email_count = row[1]
 
-    if calls_today == 0:
+    if calls_yesterday == 0:
         row = db.execute(
             text("""
                 SELECT date(datetime(started_at, '+5 hours', '+30 minutes')) as d,
                        count(*) as c
                 FROM calls WHERE started_at IS NOT NULL
+                  AND date(datetime(started_at, '+5 hours', '+30 minutes')) < :today_str
                 GROUP BY d ORDER BY d DESC LIMIT 1
-            """)
+            """),
+            {"today_str": today_str_ist}
         ).fetchone()
         if row:
             last_active_calls_date  = row[0]
