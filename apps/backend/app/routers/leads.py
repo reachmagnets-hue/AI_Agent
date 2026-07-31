@@ -4,6 +4,7 @@ from sqlalchemy import or_, and_, desc, func, case
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from uuid import UUID
+from app.utils.timezone import get_ist_today_start, get_ist_yesterday_start, get_ist_yesterday_end
 import csv
 import io
 
@@ -208,9 +209,8 @@ def get_leads_overview_stats(db: Session = Depends(get_db)):
         for name, total, booked in campaign_rows
     ]
     
-    # Daily counts
-    from datetime import timedelta
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    # Daily counts (IST-aware — VPS runs UTC but users are in IST)
+    today_start = get_ist_today_start()
     week_start = today_start - timedelta(days=7)
     
     today_called = db.query(Lead).filter(Lead.is_active == True, Lead.last_called_at >= today_start).count()
@@ -258,9 +258,10 @@ def get_lead_sources(db: Session = Depends(get_db)):
 @router.get("/counts")
 def get_lead_counts(db: Session = Depends(get_db)):
     """Get total lead counts for campaign creation UI including extraction date breakdowns"""
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    yesterday_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
-    yesterday_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
+    # IST-aware day boundaries — VPS runs UTC but user's calendar day is IST
+    today_start = get_ist_today_start()
+    yesterday_start = get_ist_yesterday_start()
+    yesterday_end = get_ist_yesterday_end()
 
     total = db.query(func.count(Lead.id)).filter(Lead.is_active == True).scalar() or 0
     with_email = db.query(func.count(Lead.id)).filter(

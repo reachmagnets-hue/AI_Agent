@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, desc, func, text
+from sqlalchemy import or_, and_, desc, func
 from typing import List, Optional
 from datetime import datetime, date, timezone
 import uuid
@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import structlog
 
 from app.core.database import get_db, uuid_match
+from app.utils.timezone import get_ist_today_start, get_ist_yesterday_start, get_ist_yesterday_end
 from app.models.campaign import Campaign
 from app.models.lead import Lead
 from app.models.call import Call
@@ -199,10 +200,11 @@ def create_campaign(
     db: Session = Depends(get_db)
 ):
     """Create a new campaign and associate leads using flexible filters"""
-    from datetime import date, datetime, timedelta
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    yesterday_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
-    yesterday_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
+    from datetime import timedelta
+    # IST-aware day boundaries — VPS runs UTC, user calendar day is IST (UTC+5:30)
+    today_start = get_ist_today_start()
+    yesterday_start = get_ist_yesterday_start()
+    yesterday_end = get_ist_yesterday_end()
 
     # Normalise campaign type
     valid_types = {"call", "email", "linkedin"}
@@ -405,7 +407,7 @@ async def resume_campaign(campaign_id: UUID, background_tasks: BackgroundTasks, 
     
     # Pull remaining pending leads
     leads = db.query(Lead).filter(
-        text(f"leads.campaign_id = '{str(campaign_id)}'"),
+        uuid_match(Lead.campaign_id, campaign_id),
         Lead.status == "pending",
         Lead.is_dnc == False,
         Lead.is_active == True

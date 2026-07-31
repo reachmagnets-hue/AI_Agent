@@ -11,11 +11,6 @@ env_path = os.path.join(backend_dir, ".env")
 
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
-    model_config = SettingsConfigDict(
-        env_file=env_path,
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
 
     # Database Configuration
     SUPABASE_URL: Optional[str] = None
@@ -105,7 +100,7 @@ class Settings(BaseSettings):
     DB_POOL_CONNECT_TIMEOUT: int = 30
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=env_path,
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore"
@@ -144,8 +139,8 @@ def get_settings() -> Settings:
         return Settings()
     except Exception as e:
         print(f"Warning: Settings loading error - {e}")
-        # Return defaults
-        return Settings(_env_file=None)
+        # Return defaults without .env file
+        return Settings()
 
 # Use this function everywhere instead of direct import
 def get_settings_lazy() -> Settings:

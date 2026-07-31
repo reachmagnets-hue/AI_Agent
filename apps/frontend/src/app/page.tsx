@@ -330,7 +330,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-violet-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <MapPin className="h-3.5 w-3.5 text-purple-400" /> Extracted Today
                 </div>
-                <div className="text-2xl font-black text-white">+{(displayStats.leadsToday > 0 ? displayStats.leadsToday : 270).toLocaleString()} <span className="text-xs font-normal text-violet-200">Leads</span></div>
+                <div className="text-2xl font-black text-white">+{(displayStats.leadsToday || 0).toLocaleString()} <span className="text-xs font-normal text-violet-200">Leads</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Target: 450 / Day</div>
               </div>
 
@@ -339,7 +339,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Mail className="h-3.5 w-3.5 text-emerald-400" /> Emails Sent Today
                 </div>
-                <div className="text-2xl font-black text-white">{(displayStats.emailSentToday > 0 ? displayStats.emailSentToday : 192).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Emails</span></div>
+                <div className="text-2xl font-black text-white">{(displayStats.emailSentToday || 0).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Emails</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Window: 6 PM - 6 AM</div>
               </div>
 
@@ -348,7 +348,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-pink-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Phone className="h-3.5 w-3.5 text-pink-400" /> Calls Conducted
                 </div>
-                <div className="text-2xl font-black text-white">{(displayStats.callsToday > 0 ? displayStats.callsToday : 124).toLocaleString()} <span className="text-xs font-normal text-pink-200">Calls</span></div>
+                <div className="text-2xl font-black text-white">{(displayStats.callsToday || 0).toLocaleString()} <span className="text-xs font-normal text-pink-200">Calls</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Window: 8 PM - 4 AM</div>
               </div>
 
@@ -357,7 +357,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Linkedin className="h-3.5 w-3.5 text-blue-400" /> LinkedIn Requests
                 </div>
-                <div className="text-2xl font-black text-white">{(displayStats.linkedinSentToday > 0 ? displayStats.linkedinSentToday : 28).toLocaleString()} <span className="text-xs font-normal text-blue-200">Sent</span></div>
+                <div className="text-2xl font-black text-white">{(displayStats.linkedinSentToday || 0).toLocaleString()} <span className="text-xs font-normal text-blue-200">Sent</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Max 30 / Day Cap</div>
               </div>
 
@@ -366,7 +366,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Calendar className="h-3.5 w-3.5 text-amber-400" /> Appts Booked
                 </div>
-                <div className="text-2xl font-black text-amber-300">{(displayStats.bookingsToday > 0 ? displayStats.bookingsToday : 3).toLocaleString()} <span className="text-xs font-normal text-amber-200">Booked</span></div>
+                <div className="text-2xl font-black text-amber-300">{(displayStats.bookingsToday || 0).toLocaleString()} <span className="text-xs font-normal text-amber-200">Booked</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Direct Meetings</div>
               </div>
             </div>
@@ -392,8 +392,14 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Users className="h-3.5 w-3.5 text-slate-400" /> Extracted Leads
                 </div>
-                <div className="text-2xl font-black text-white">+{(displayStats.leadsYesterday > 0 ? displayStats.leadsYesterday : 504).toLocaleString()} <span className="text-xs font-normal text-slate-300">Leads</span></div>
-                <div className="text-[10px] text-slate-300 mt-1 font-medium">Scraped Yesterday</div>
+                <div className="text-2xl font-black text-white">
+                  +{(displayStats.leadsYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-slate-300">Leads</span>
+                </div>
+                <div className="text-[10px] text-slate-300 mt-1 font-medium">
+                  {displayStats.leadsYesterday > 0 
+                    ? 'Scraped Yesterday' 
+                    : (displayStats.lastActiveLeadsDate ? `Last Batch (${fmtDate(displayStats.lastActiveLeadsDate)}): +${displayStats.lastActiveLeadsCount}` : 'No Recent Extraction')}
+                </div>
               </div>
 
               {/* 2. Email Outreach Yesterday */}
@@ -401,8 +407,14 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Mail className="h-3.5 w-3.5 text-emerald-400" /> Email Outreach
                 </div>
-                <div className="text-2xl font-black text-white">{(displayStats.emailSentYesterday > 0 ? displayStats.emailSentYesterday : (displayStats.emailSent || 208)).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Sent</span></div>
-                <div className="text-[10px] text-slate-300 mt-1 font-medium">Delivered: {(displayStats.emailDelivered || 181).toLocaleString()}</div>
+                <div className="text-2xl font-black text-white">
+                  {(displayStats.emailSentYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Sent</span>
+                </div>
+                <div className="text-[10px] text-slate-300 mt-1 font-medium">
+                  {displayStats.emailSentYesterday > 0 
+                    ? `Delivered: ${(displayStats.emailDelivered || 0).toLocaleString()}` 
+                    : (displayStats.lastActiveEmailDate ? `Last Batch (${fmtDate(displayStats.lastActiveEmailDate)}): ${displayStats.lastActiveEmailCount} Sent` : 'Delivered: 0')}
+                </div>
               </div>
 
               {/* 3. Voice Calls Yesterday */}
@@ -410,8 +422,14 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-pink-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Phone className="h-3.5 w-3.5 text-pink-400" /> Voice Calls
                 </div>
-                <div className="text-2xl font-black text-white">{(displayStats.callsYesterday > 0 ? displayStats.callsYesterday : (displayStats.totalCalls || 1859)).toLocaleString()} <span className="text-xs font-normal text-pink-200">Calls</span></div>
-                <div className="text-[10px] text-slate-300 mt-1 font-medium">1,652 Conversations</div>
+                <div className="text-2xl font-black text-white">
+                  {(displayStats.callsYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-pink-200">Calls</span>
+                </div>
+                <div className="text-[10px] text-slate-300 mt-1 font-medium">
+                  {displayStats.callsYesterday > 0 
+                    ? 'Recorded Calls' 
+                    : (displayStats.lastActiveCallsDate ? `Last Batch (${fmtDate(displayStats.lastActiveCallsDate)}): ${displayStats.lastActiveCallsCount} Calls` : 'Recorded Calls')}
+                </div>
               </div>
 
               {/* 4. LinkedIn Autopilot */}
@@ -419,7 +437,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Linkedin className="h-3.5 w-3.5 text-blue-400" /> LinkedIn Autopilot
                 </div>
-                <div className="text-2xl font-black text-white">{(displayStats.linkedinSentYesterday > 0 ? displayStats.linkedinSentYesterday : (displayStats.linkedinSent || 55)).toLocaleString()} <span className="text-xs font-normal text-blue-200">Sent</span></div>
+                <div className="text-2xl font-black text-white">{(displayStats.linkedinSentYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-blue-200">Sent</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Scraped & Outreach</div>
               </div>
 
@@ -428,7 +446,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Sparkles className="h-3.5 w-3.5 text-amber-400" /> Directories Enriched
                 </div>
-                <div className="text-2xl font-black text-amber-300">{(displayStats.directoriesExtracted || 353).toLocaleString()} <span className="text-xs font-normal text-amber-200">Profiles</span></div>
+                <div className="text-2xl font-black text-amber-300">{(displayStats.directoriesExtracted || 0).toLocaleString()} <span className="text-xs font-normal text-amber-200">Profiles</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Yelp, BBB, Nextdoor, etc.</div>
               </div>
             </div>
@@ -519,19 +537,19 @@ export default function Dashboard() {
               <CardContent className="pt-4 space-y-3">
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Outbound Calls</span>
-                  <span className="font-extrabold text-slate-800">{displayStats.totalCalls?.toLocaleString()}</span>
+                  <span className="font-extrabold text-slate-800">{(displayStats.totalCalls || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2 bg-pink-50/50 px-2 py-1 rounded">
                   <span className="text-pink-700 font-bold">Calls Conducted Today</span>
-                  <span className="font-extrabold text-pink-700">{displayStats.callsToday > 0 ? displayStats.callsToday : 124}</span>
+                  <span className="font-extrabold text-pink-700">{displayStats.callsToday || 0}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Failed Dials</span>
-                  <span className="font-bold text-rose-600">{displayStats.failedCalls}</span>
+                  <span className="font-bold text-rose-600">{displayStats.failedCalls || 0}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-500 font-medium">Success Rate</span>
-                  <span className="font-extrabold text-emerald-600">{displayStats.successRate}%</span>
+                  <span className="font-extrabold text-emerald-600">{displayStats.successRate || 0}%</span>
                 </div>
               </CardContent>
             </Card>
@@ -548,41 +566,41 @@ export default function Dashboard() {
                 <div className="grid grid-cols-3 gap-2 text-center border-b border-slate-100 pb-3">
                   <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
                     <p className="text-[10px] text-slate-400 font-bold">ALL-TIME SENT</p>
-                    <p className="text-base font-extrabold text-slate-800">{displayStats.emailSent?.toLocaleString()}</p>
+                    <p className="text-base font-extrabold text-slate-800">{(displayStats.emailSent || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100">
                     <p className="text-[10px] text-emerald-600 font-bold">DELIVERED</p>
-                    <p className="text-base font-extrabold text-emerald-700">{displayStats.emailDelivered?.toLocaleString()}</p>
+                    <p className="text-base font-extrabold text-emerald-700">{(displayStats.emailDelivered || 0).toLocaleString()}</p>
                   </div>
                   <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
                     <p className="text-[10px] text-amber-600 font-bold">PENDING</p>
-                    <p className="text-base font-extrabold text-amber-700">{(displayStats.emailPending ?? (displayStats.totalContacts - displayStats.emailSent))?.toLocaleString()}</p>
+                    <p className="text-base font-extrabold text-amber-700">{(displayStats.emailPending ?? (displayStats.totalContacts - displayStats.emailSent))?.toLocaleString() || 0}</p>
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2 bg-emerald-50/50 px-2 py-1 rounded">
                   <span className="text-emerald-700 font-bold">Emails Sent Today</span>
-                  <span className="font-extrabold text-emerald-700">{displayStats.emailSentToday > 0 ? displayStats.emailSentToday : 192}</span>
+                  <span className="font-extrabold text-emerald-700">{displayStats.emailSentToday || 0}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium flex items-center gap-1.5"><Eye className="h-4 w-4 text-blue-500" /> Opens</span>
-                  <span className="font-bold text-slate-800">{displayStats.emailOpened?.toLocaleString()}</span>
+                  <span className="font-bold text-slate-800">{(displayStats.emailOpened || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium flex items-center gap-1.5"><Zap className="h-4 w-4 text-purple-500" /> Clicks</span>
-                  <span className="font-bold text-slate-800">{displayStats.emailClicked?.toLocaleString()}</span>
+                  <span className="font-bold text-slate-800">{(displayStats.emailClicked || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-emerald-500" /> Replies</span>
-                  <span className="font-bold text-emerald-600">{displayStats.emailReplied?.toLocaleString()}</span>
+                  <span className="font-bold text-emerald-600">{(displayStats.emailReplied || 0).toLocaleString()}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                   <div className="flex justify-between items-center text-rose-500 font-medium">
                     <span>Bounced Leads:</span>
-                    <span className="font-bold">{displayStats.emailBounced}</span>
+                    <span className="font-bold">{displayStats.emailBounced || 0}</span>
                   </div>
                   <div className="flex justify-between items-center text-rose-600 font-medium">
                     <span>Inbox Bounce Emails:</span>
-                    <span className="font-bold">{displayStats.rawBounceMessages ?? 18}</span>
+                    <span className="font-bold">{displayStats.rawBounceMessages || 0}</span>
                   </div>
                 </div>
               </CardContent>
@@ -599,23 +617,23 @@ export default function Dashboard() {
               <CardContent className="pt-4 space-y-3">
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Connections Sent</span>
-                  <span className="font-extrabold text-blue-600">{(displayStats.linkedinSent > 0 ? displayStats.linkedinSent : 55).toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">(Max 30/day)</span></span>
+                  <span className="font-extrabold text-blue-600">{(displayStats.linkedinSent || 0).toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">(Max 30/day)</span></span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2 bg-blue-50/50 px-2 py-1 rounded">
                   <span className="text-blue-700 font-bold">Sent Today</span>
-                  <span className="font-extrabold text-blue-700">{displayStats.linkedinSentToday > 0 ? displayStats.linkedinSentToday : 28}</span>
+                  <span className="font-extrabold text-blue-700">{displayStats.linkedinSentToday || 0}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Connections Accepted</span>
-                  <span className="font-bold text-emerald-600">{(displayStats.linkedinConnected > 0 ? displayStats.linkedinConnected : 42).toLocaleString()}</span>
+                  <span className="font-bold text-emerald-600">{(displayStats.linkedinConnected || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-medium">Follow-Up Messages Sent</span>
-                  <span className="font-bold text-purple-600">{(displayStats.linkedinMessagesSent > 0 ? displayStats.linkedinMessagesSent : 38).toLocaleString()}</span>
+                  <span className="font-bold text-purple-600">{(displayStats.linkedinMessagesSent || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-slate-500 font-medium">Leads Replied / Booked</span>
-                  <span className="font-extrabold text-slate-800">{displayStats.linkedinReplied > 0 ? displayStats.linkedinReplied : 8}</span>
+                  <span className="font-extrabold text-slate-800">{displayStats.linkedinReplied || 0}</span>
                 </div>
               </CardContent>
             </Card>

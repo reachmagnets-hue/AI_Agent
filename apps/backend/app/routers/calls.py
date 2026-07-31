@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, desc, func, cast, String, text
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from app.utils.timezone import get_ist_today_start
 from uuid import UUID
 
 from app.core.database import get_db
@@ -143,68 +144,75 @@ def get_calls(
 @router.get("/dashboard/stats")
 def get_dashboard_stats(db: Session = Depends(get_db)):
     """Retrieve summarized analytics for the main dashboard"""
+    from app.utils.timezone import get_ist_today_start, get_ist_yesterday_start, get_ist_yesterday_end
     from datetime import timedelta, timezone as dt_timezone
+
     ist_tz = dt_timezone(timedelta(hours=5, minutes=30))
     now_ist = datetime.now(dt_timezone.utc).astimezone(ist_tz)
-    # IST today start as UTC-aware datetime (for comparing UTC-stored timestamps)
-    today_ist_midnight_utc = datetime.combine(now_ist.date(), datetime.min.time(), tzinfo=ist_tz).astimezone(dt_timezone.utc).replace(tzinfo=None)
-    today_dt = today_ist_midnight_utc  # naive UTC datetime representing IST day start
-    today_str = now_ist.strftime("%Y-%m-%d")
-    yesterday_str = (now_ist.date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
+    # IST-aware day boundaries (naive UTC datetimes for SQLAlchemy)
+    today_dt      = get_ist_today_start()
+    yesterday_dt  = get_ist_yesterday_start()
+    yesterday_end = get_ist_yesterday_end()
+
+    # IST date strings for the 7-day rolling window (cast+like is fine for ranges)
+    seven_days_ago_str = (now_ist.date() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    # ─── Total Contacts ───────────────────────────────────────────────────────
     total_contacts = db.query(Lead).filter(Lead.is_active == True).count()
+
+    # ─── Leads extracted today / yesterday ───────────────────────────────────
     leads_today = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(
-            cast(Lead.created_at, String).like(f"{today_str}%"),
-            cast(Lead.imported_at, String).like(f"{today_str}%")
-        )
+        Lead.created_at >= today_dt
     ).count()
     leads_yesterday = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(
-            cast(Lead.created_at, String).like(f"{yesterday_str}%"),
-            cast(Lead.imported_at, String).like(f"{yesterday_str}%")
-        )
+        Lead.created_at >= yesterday_dt,
+        Lead.created_at <= yesterday_end
     ).count()
+
+    # ─── Campaigns ───────────────────────────────────────────────────────────
     total_campaigns = db.query(Campaign).count()
+
+    # ─── Calls ───────────────────────────────────────────────────────────────
     total_calls = db.query(Call).count()
     calls_today = db.query(Call).filter(
-        or_(
-            Call.created_at >= today_dt,
-            cast(Call.created_at, String).like(f"{today_str}%")
-        )
+        Call.created_at >= today_dt
     ).count()
     calls_yesterday = db.query(Call).filter(
-        cast(Call.created_at, String).like(f"{yesterday_str}%")
+        Call.created_at >= yesterday_dt,
+        Call.created_at <= yesterday_end
     ).count()
-    failed_calls = db.query(Call).filter(Call.status.in_(["failed", "busy", "no-answer"])).count()
-    pending_calls = db.query(Lead).filter(Lead.is_active == True, Lead.status == "pending").count()
-    
+    failed_calls = db.query(Call).filter(
+        Call.status.in_(["failed", "busy", "no-answer"])
+    ).count()
+    pending_calls = db.query(Lead).filter(
+        Lead.is_active == True, Lead.status == "pending"
+    ).count()
+
     total_completed = db.query(Call).filter(Call.status == "completed").count()
-    total_meetings = db.query(Call).filter(Call.meeting_booked == True).count()
-    
+    total_meetings  = db.query(Call).filter(Call.meeting_booked == True).count()
+
     success_rate = 0.0
     if total_completed > 0:
         success_rate = round((total_meetings / total_completed) * 100.0, 1)
     elif total_calls > 0:
         success_rate = round((total_meetings / total_calls) * 100.0, 1)
 
-    # 📧 Email Campaign Stats
+    # ─── Email Stats ─────────────────────────────────────────────────────────
     email_sent = db.query(Lead).filter(
         Lead.is_active == True,
         or_(Lead.email_sent_at.isnot(None), Lead.email_status.isnot(None))
     ).count()
     email_sent_today = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(
-            Lead.email_sent_at >= today_dt,
-            cast(Lead.email_sent_at, String).like(f"{today_str}%")
-        )
+        Lead.email_sent_at >= today_dt
     ).count()
     email_sent_yesterday = db.query(Lead).filter(
         Lead.is_active == True,
-        cast(Lead.email_sent_at, String).like(f"{yesterday_str}%")
+        Lead.email_sent_at >= yesterday_dt,
+        Lead.email_sent_at <= yesterday_end
     ).count()
     email_bounced = db.query(Lead).filter(
         Lead.is_active == True,
@@ -227,29 +235,35 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.is_active == True,
         or_(Lead.email_status.in_(["clicked", "replied"]), Lead.email_clicked_at.isnot(None))
     ).count()
-    email_replied = db.query(Lead).filter(Lead.is_active == True, Lead.email_status == "replied").count()
+    email_replied = db.query(Lead).filter(
+        Lead.is_active == True, Lead.email_status == "replied"
+    ).count()
     email_pending = db.query(Lead).filter(
         Lead.is_active == True,
         Lead.email.isnot(None),
         Lead.email != "",
         Lead.email_sent_at.is_(None)
     ).count()
+    # Real bounce messages from DB (not hardcoded)
+    raw_bounce_messages = db.query(Lead).filter(
+        Lead.is_active == True,
+        Lead.email_bounced_at.isnot(None)
+    ).count()
 
-    # 🔗 LinkedIn Campaign Stats
+    # ─── LinkedIn Stats ───────────────────────────────────────────────────────
     linkedin_sent = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(Lead.linkedin_sent_at.isnot(None), Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
+        or_(Lead.linkedin_sent_at.isnot(None),
+            Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
     ).count()
     linkedin_sent_today = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(
-            Lead.linkedin_sent_at >= today_dt,
-            cast(Lead.linkedin_sent_at, String).like(f"{today_str}%")
-        )
+        Lead.linkedin_sent_at >= today_dt
     ).count()
     linkedin_sent_yesterday = db.query(Lead).filter(
         Lead.is_active == True,
-        cast(Lead.linkedin_sent_at, String).like(f"{yesterday_str}%")
+        Lead.linkedin_sent_at >= yesterday_dt,
+        Lead.linkedin_sent_at <= yesterday_end
     ).count()
     linkedin_connected = db.query(Lead).filter(
         Lead.is_active == True,
@@ -264,7 +278,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.linkedin_status == "meeting_scheduled"
     ).count()
 
-    # 🔍 Extraction & Directory Enrichment Metrics
+    # ─── Extraction & Directory Enrichment ───────────────────────────────────
     directories_extracted = db.query(Lead).filter(
         or_(
             Lead.internal_notes.like("%[Directories]%"),
@@ -291,7 +305,6 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             Lead.youtube_url.isnot(None)
         )
     ).count()
-
     total_extracted = db.query(Lead).filter(
         Lead.is_active == True,
         or_(
@@ -301,125 +314,139 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         )
     ).count()
 
-    # 📅 Overall Bookings
+    # ─── Bookings ─────────────────────────────────────────────────────────────
     total_bookings = db.query(Appointment).count()
     bookings_today = db.query(Appointment).filter(
-        or_(
-            Appointment.created_at >= today_dt,
-            cast(Appointment.created_at, String).like(f"{today_str}%")
-        )
+        Appointment.created_at >= today_dt
     ).count()
 
     # ── LAST ACTIVE DAY fallback ──────────────────────────────────────────────
-    # When today shows 0 for any key metric, find the most recent day with real data
-    # so the frontend can label it as "Last active: Jul 22" instead of "0 today"
-    
-    last_active_leads_date = None
+    # When today shows 0, find the most recent day with real data.
+    # Uses IST-offset adjusted dates stored as UTC naive strings.
+    last_active_leads_date  = None
     last_active_leads_count = 0
-    last_active_email_date = None
+    last_active_email_date  = None
     last_active_email_count = 0
-    last_active_calls_date = None
+    last_active_calls_date  = None
     last_active_calls_count = 0
 
     if leads_today == 0:
-        # Find most recent day with lead imports
+        # Find most recent day with any lead; convert UTC date back to IST date
         row = db.execute(
-            text("SELECT substr(created_at,1,10) as d, count(*) as c FROM leads WHERE is_active=1 GROUP BY d ORDER BY d DESC LIMIT 1")
+            text("""
+                SELECT date(datetime(created_at, '+5 hours', '+30 minutes')) as d,
+                       count(*) as c
+                FROM leads WHERE is_active=1 AND created_at IS NOT NULL
+                GROUP BY d ORDER BY d DESC LIMIT 1
+            """)
         ).fetchone()
         if row:
-            last_active_leads_date = row[0]
+            last_active_leads_date  = row[0]
             last_active_leads_count = row[1]
 
     if email_sent_today == 0:
         row = db.execute(
-            text("SELECT substr(email_sent_at,1,10) as d, count(*) as c FROM leads WHERE email_sent_at IS NOT NULL AND is_active=1 GROUP BY d ORDER BY d DESC LIMIT 1")
+            text("""
+                SELECT date(datetime(email_sent_at, '+5 hours', '+30 minutes')) as d,
+                       count(*) as c
+                FROM leads WHERE email_sent_at IS NOT NULL AND is_active=1
+                GROUP BY d ORDER BY d DESC LIMIT 1
+            """)
         ).fetchone()
         if row:
-            last_active_email_date = row[0]
+            last_active_email_date  = row[0]
             last_active_email_count = row[1]
 
     if calls_today == 0:
         row = db.execute(
-            text("SELECT substr(started_at,1,10) as d, count(*) as c FROM calls WHERE started_at IS NOT NULL GROUP BY d ORDER BY d DESC LIMIT 1")
+            text("""
+                SELECT date(datetime(started_at, '+5 hours', '+30 minutes')) as d,
+                       count(*) as c
+                FROM calls WHERE started_at IS NOT NULL
+                GROUP BY d ORDER BY d DESC LIMIT 1
+            """)
         ).fetchone()
         if row:
-            last_active_calls_date = row[0]
+            last_active_calls_date  = row[0]
             last_active_calls_count = row[1]
 
-    # 7-day rolling window stats (last 7 days regardless of today)
-    seven_days_ago = (now_ist.date() - timedelta(days=7)).strftime("%Y-%m-%d")
+    # 7-day rolling window stats
+    seven_days_ago_dt = today_dt - timedelta(days=7)
     leads_7d = db.query(Lead).filter(
         Lead.is_active == True,
-        cast(Lead.created_at, String) >= seven_days_ago
+        Lead.created_at >= seven_days_ago_dt
     ).count()
     calls_7d = db.query(Call).filter(
-        cast(Call.created_at, String) >= seven_days_ago
+        Call.created_at >= seven_days_ago_dt
     ).count()
     email_sent_7d = db.query(Lead).filter(
         Lead.is_active == True,
         Lead.email_sent_at.isnot(None),
-        cast(Lead.email_sent_at, String) >= seven_days_ago
+        Lead.email_sent_at >= seven_days_ago_dt
     ).count()
-        
+
     return {
-        "totalContacts": total_contacts,
-        "leadsToday": leads_today,
-        "leadsYesterday": leads_yesterday,
-        "totalCampaigns": total_campaigns,
-        "totalCalls": total_calls,
-        "callsToday": calls_today,
-        "callsYesterday": calls_yesterday,
-        "successRate": success_rate,
-        "pendingCalls": pending_calls,
-        "failedCalls": failed_calls,
-        # Email Metrics
-        "emailSent": email_sent,
-        "emailSentToday": email_sent_today,
-        "emailSentYesterday": email_sent_yesterday,
-        "emailDelivered": email_delivered,
-        "emailOpened": email_opened,
-        "emailClicked": email_clicked,
-        "emailReplied": email_replied,
-        "emailBounced": email_bounced,
-        "rawBounceMessages": 18,
-        "emailBlocked": email_blocked,
-        "emailPending": email_pending,
-        # LinkedIn Metrics
-        "linkedinSent": linkedin_sent,
-        "linkedinSentToday": linkedin_sent_today,
+        "totalContacts":        total_contacts,
+        "leadsToday":           leads_today,
+        "leadsYesterday":       leads_yesterday,
+        "totalCampaigns":       total_campaigns,
+        "totalCalls":           total_calls,
+        "callsToday":           calls_today,
+        "callsYesterday":       calls_yesterday,
+        "successRate":          success_rate,
+        "pendingCalls":         pending_calls,
+        "failedCalls":          failed_calls,
+        # Email
+        "emailSent":            email_sent,
+        "emailSentToday":       email_sent_today,
+        "emailSentYesterday":   email_sent_yesterday,
+        "emailDelivered":       email_delivered,
+        "emailOpened":          email_opened,
+        "emailClicked":         email_clicked,
+        "emailReplied":         email_replied,
+        "emailBounced":         email_bounced,
+        "rawBounceMessages":    raw_bounce_messages,
+        "emailBlocked":         email_blocked,
+        "emailPending":         email_pending,
+        # LinkedIn
+        "linkedinSent":         linkedin_sent,
+        "linkedinSentToday":    linkedin_sent_today,
         "linkedinSentYesterday": linkedin_sent_yesterday,
-        "linkedinConnected": linkedin_connected,
+        "linkedinConnected":    linkedin_connected,
         "linkedinMessagesSent": linkedin_messages_sent,
-        "linkedinReplied": linkedin_replied,
-        # Extraction & Enrichment Metrics
+        "linkedinReplied":      linkedin_replied,
+        # Extraction & Enrichment
         "directoriesExtracted": directories_extracted,
-        "totalExtracted": total_extracted,
-        "leadsWithEmails": leads_with_emails,
-        "leadsWithSocials": leads_with_socials,
-        # Bookings Metrics
-        "totalBookings": total_bookings,
-        "bookingsToday": bookings_today,
-        # ── Last-Active-Day fallback (populated when today = 0) ──
-        "lastActiveLeadsDate": last_active_leads_date,
+        "totalExtracted":       total_extracted,
+        "leadsWithEmails":      leads_with_emails,
+        "leadsWithSocials":     leads_with_socials,
+        # Bookings
+        "totalBookings":        total_bookings,
+        "bookingsToday":        bookings_today,
+        # Last-active-day fallback (populated when today = 0)
+        "lastActiveLeadsDate":  last_active_leads_date,
         "lastActiveLeadsCount": last_active_leads_count,
-        "lastActiveEmailDate": last_active_email_date,
+        "lastActiveEmailDate":  last_active_email_date,
         "lastActiveEmailCount": last_active_email_count,
-        "lastActiveCallsDate": last_active_calls_date,
+        "lastActiveCallsDate":  last_active_calls_date,
         "lastActiveCallsCount": last_active_calls_count,
         # 7-day rolling window
-        "leads7d": leads_7d,
-        "calls7d": calls_7d,
-        "emailSent7d": email_sent_7d,
+        "leads7d":              leads_7d,
+        "calls7d":              calls_7d,
+        "emailSent7d":          email_sent_7d,
     }
+
+
+
 
 
 
 @router.get("/stats/overview")
 def get_calls_stats_overview(db: Session = Depends(get_db)):
     """Hourly and daily metrics overview report for call logs"""
-    from datetime import timedelta, timezone
+    from datetime import timezone
     now_utc = datetime.now(timezone.utc)
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_start = get_ist_today_start()  # IST-aware: VPS runs UTC but user calendar is IST
     week_start = today_start - timedelta(days=today_start.weekday())
     month_start = today_start.replace(day=1)
     

@@ -38,7 +38,8 @@ async def send_linkedin_campaign(campaign_id: str, limit: int = 30, force_simula
     
     db = SessionLocal()
     try:
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        from app.utils.timezone import get_ist_today_start
+        today_start = get_ist_today_start()  # IST midnight as naive UTC
         # Count connections sent today
         actions_today = db.query(Lead).filter(
             Lead.linkedin_status.in_(['connection_sent', 'connected', 'message_sent', 'meeting_scheduled']),
@@ -156,7 +157,7 @@ async def run_playwright_campaign(cookie: str, lead_ids: list, remaining_actions
                     await asyncio.sleep(1.0)
                     
                     try:
-                        await page.screenshot(path="/home/chetan-patil/.gemini/antigravity-ide/brain/4da66a20-3865-4ff0-8500-2426726bbe55/linkedin_debug.png")
+                        await page.screenshot(path="/tmp/linkedin_debug.png")
                     except Exception:
                         pass
                     

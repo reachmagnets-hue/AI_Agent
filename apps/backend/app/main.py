@@ -111,17 +111,24 @@ app = create_application()
 
 
 
+# Build CORS allowed origins list
+_cors_origins = list(filter(None, [
+    settings.FRONTEND_URL,
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+]))
+# In production also allow the server's own BASE_URL domain (for same-server frontend)
+if settings.BASE_URL and settings.BASE_URL not in _cors_origins:
+    _cors_origins.append(settings.BASE_URL)
+
 # Add middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # Add gzip compression

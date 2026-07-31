@@ -108,3 +108,54 @@ def is_within_calling_hours(phone_number: str, state_code: str = None) -> bool:
     )
     
     return is_valid
+
+
+# ---------------------------------------------------------------------------
+# IST (Asia/Kolkata = UTC+5:30) aware "today" / "yesterday" boundaries
+# Returns naive UTC datetimes for SQLAlchemy comparisons against stored-naive timestamps.
+# ---------------------------------------------------------------------------
+IST_OFFSET = timedelta(hours=5, minutes=30)
+IST_TZ = timezone(IST_OFFSET)
+
+
+def _ist_midnight_as_utc(days_delta: int = 0) -> datetime:
+    """
+    Returns the UTC equivalent of IST midnight N days from today (naive, for SQLAlchemy).
+    days_delta=0 → today IST midnight in UTC
+    days_delta=-1 → yesterday IST midnight in UTC
+    """
+    now_ist = datetime.now(IST_TZ)
+    # Build IST midnight for the requested day
+    ist_date = (now_ist + timedelta(days=days_delta)).date()
+    ist_midnight = datetime(ist_date.year, ist_date.month, ist_date.day, 0, 0, 0, tzinfo=IST_TZ)
+    # Convert to UTC and strip tzinfo so SQLAlchemy treats it as naive UTC
+    utc_midnight = ist_midnight.astimezone(timezone.utc).replace(tzinfo=None)
+    return utc_midnight
+
+
+def get_ist_day_bounds(days_delta: int = 0):
+    """
+    Returns (start, end) naive UTC datetimes covering one full IST calendar day.
+    days_delta=0 → today (IST)
+    days_delta=-1 → yesterday (IST)
+    """
+    start = _ist_midnight_as_utc(days_delta)
+    end = _ist_midnight_as_utc(days_delta + 1) - timedelta(microseconds=1)
+    return start, end
+
+
+def get_ist_today_start() -> datetime:
+    """Returns naive UTC datetime corresponding to 00:00:00 IST today."""
+    return _ist_midnight_as_utc(0)
+
+
+def get_ist_yesterday_start() -> datetime:
+    """Returns naive UTC datetime corresponding to 00:00:00 IST yesterday."""
+    return _ist_midnight_as_utc(-1)
+
+
+def get_ist_yesterday_end() -> datetime:
+    """Returns naive UTC datetime corresponding to 23:59:59.999999 IST yesterday."""
+    _, end = get_ist_day_bounds(-1)
+    return end
+

@@ -105,9 +105,26 @@ export default function UnifiedLeadSourcingPage() {
 
   // WebSocket Listener for both Google Maps & LinkedIn Autopilot progress
   useEffect(() => {
-    const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const wsUrl = rawApiUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/live';
-    const ws = new WebSocket(wsUrl);
+    let wsUrl = '';
+    if (typeof window !== 'undefined') {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      if (host.includes(':3000')) {
+        wsUrl = `${protocol}//${window.location.hostname}:8000/ws/live`;
+      } else {
+        wsUrl = `${protocol}//${host}/ws/live`;
+      }
+    } else {
+      wsUrl = 'ws://localhost:8000/ws/live';
+    }
+    
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error('Failed to create WebSocket connection:', err);
+      return;
+    }
     
     ws.onmessage = (event) => {
       try {
@@ -144,6 +161,8 @@ export default function UnifiedLeadSourcingPage() {
             text: `Success! Local leads with social details saved in database.`,
             type: 'success'
           });
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['extracted-leads'] });
         }
         else if (data.event === 'extraction_failed') {
           setIsExtracting(false);
@@ -166,10 +185,12 @@ export default function UnifiedLeadSourcingPage() {
             setStatusMessage({ text: 'LinkedIn Autopilot outreach cycle completed successfully!', type: 'success' });
           }
           refetchStats();
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
         }
 
         if (data.event === 'lead_status_updated') {
           refetchStats();
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
         }
       } catch (e) {
         console.error('Error parsing live WebSocket message:', e);
@@ -179,7 +200,7 @@ export default function UnifiedLeadSourcingPage() {
     return () => {
       ws.close();
     };
-  }, [linkedinIndustry, refetchStats]);
+  }, [linkedinIndustry, refetchStats, queryClient]);
 
   // Handle Google Maps Extraction Trigger
   const handleStartGmapsExtraction = async (e: React.FormEvent) => {
@@ -193,7 +214,7 @@ export default function UnifiedLeadSourcingPage() {
     setStatusMessage({ text: 'Sending Google Maps extraction request to server...', type: 'info' });
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/extraction/scrape`, {
+      const response = await fetch(`/api/v1/extraction/scrape`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ industry: gmapsIndustry, location: 'USA', limit: 50 })

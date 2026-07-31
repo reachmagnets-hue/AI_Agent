@@ -316,7 +316,7 @@ export const contactsApi = {
   importBulk: (contacts: any[]) => apiClient.post('/api/v1/leads/bulk', { leads: contacts }),
 
   importCSV: (formData: FormData) => {
-    return fetch(`${API_BASE_URL}/api/v1/leads/import-csv`, {
+    return fetch(`${API_BASE_URL}/api/v1/leads/import`, {
       method: 'POST',
       body: formData,
     }).then(r => r.json());
