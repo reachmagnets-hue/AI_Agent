@@ -9,11 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Users, Search, Plus, Filter, Upload, AlertCircle, Eye, Star, Sparkles, X, Loader2, FileImage, Download } from 'lucide-react';
 
-async function fetchLeads({ search, status, priority, page, leadTab }: { search: string; status: string; priority: string; page: number; leadTab: string }) {
+async function fetchLeads({ search, status, priority, businessType, page, leadTab }: { search: string; status: string; priority: string; businessType: string; page: number; leadTab: string }) {
   let url = `/api/v1/leads/?page=${page}&limit=15`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
   if (status && status !== 'all') url += `&status=${status}`;
   if (priority && priority !== 'all') url += `&priority=${priority}`;
+  if (businessType && businessType !== 'all') url += `&business_type=${encodeURIComponent(businessType)}`;
   
   if (leadTab === 'email') {
     url += '&has_email=true';
@@ -50,9 +51,20 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
+  const [businessType, setBusinessType] = useState('all');
+  const [leadTab, setLeadTab] = useState<'all' | 'phone' | 'email' | 'linkedin' | 'social'>('all');
   const [page, setPage] = useState(1);
   const [file, setFile] = useState<File | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  const { data: industriesData } = useQuery<{ industries: string[] }>({
+    queryKey: ['lead-industries-list'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/leads/industries');
+      if (!res.ok) throw new Error('Failed to fetch industries');
+      return res.json();
+    }
+  });
 
   const handleExportCSV = () => {
     let url = `/api/v1/leads/export/csv?`;
@@ -89,7 +101,6 @@ export default function LeadsPage() {
   const [screenshotQueue, setScreenshotQueue] = useState<QueueItem[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [leadTab, setLeadTab] = useState<'all' | 'phone' | 'email' | 'linkedin' | 'social'>('all');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -203,8 +214,8 @@ export default function LeadsPage() {
   };
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['leads', { search, status, priority, page, leadTab }],
-    queryFn: () => fetchLeads({ search, status, priority, page, leadTab }),
+    queryKey: ['leads', { search, status, priority, businessType, page, leadTab }],
+    queryFn: () => fetchLeads({ search, status, priority, businessType, page, leadTab }),
   });
 
   const importMutation = useMutation({
@@ -592,12 +603,24 @@ export default function LeadsPage() {
               <select
                 value={priority}
                 onChange={(e) => { setPriority(e.target.value); setPage(1); }}
-                className="bg-background border rounded px-2.5 py-1.5 text-sm"
+                className="bg-background border rounded px-2.5 py-1.5 text-sm font-medium"
               >
                 <option value="all">All Priorities</option>
                 <option value="normal">Normal</option>
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
+              </select>
+
+              {/* Industry Filter Dropdown */}
+              <select
+                value={businessType}
+                onChange={(e) => { setBusinessType(e.target.value); setPage(1); }}
+                className="bg-background border rounded px-2.5 py-1.5 text-sm font-medium capitalize"
+              >
+                <option value="all">All Industries</option>
+                {industriesData?.industries?.map((ind, idx) => (
+                  <option key={idx} value={ind}>{ind}</option>
+                ))}
               </select>
 
               <Button

@@ -21,6 +21,17 @@ from fastapi.responses import StreamingResponse
 
 # ─── STATIC ROUTES FIRST (before any /{lead_id} dynamic routes) ───────────────
 
+@router.get("/industries")
+def get_lead_industries(db: Session = Depends(get_db)):
+    """Retrieve distinct active industries (business_types) from leads table"""
+    results = db.query(Lead.business_type).filter(
+        Lead.business_type.isnot(None),
+        Lead.business_type != "",
+        Lead.is_active == True
+    ).distinct().all()
+    industries = sorted([r[0] for r in results if r[0]])
+    return {"industries": industries}
+
 @router.get("/export/csv")
 def export_leads_csv(
     search: Optional[str] = Query(None),

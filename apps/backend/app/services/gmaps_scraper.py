@@ -303,12 +303,17 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
     finally:
         db.close()
         
-    search_query = f"{industry} in {location}"
-    search_url = f"https://www.google.com/maps/search/{quote_plus(search_query)}"
-    
+    # Determine target locations list
+    from app.core.scheduler import TARGET_LOCATIONS
+    if location.upper() in ["USA", "ALL"] or limit <= 0:
+        locations_to_scrape = TARGET_LOCATIONS
+    else:
+        locations_to_scrape = [location]
+
+    max_limit = 5000 if limit <= 0 else limit
     extracted_count = 0
     processed_card_ids: Set[str] = set()
-    
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
@@ -323,21 +328,32 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
         )
         context = await browser.new_context(viewport={"width": 1280, "height": 800})
         page = await context.new_page()
-        
+
         try:
-            logger.info("Navigating to Google Maps search", url=search_url)
-            await page.goto(search_url, timeout=60000)
-            await page.wait_for_timeout(4000)
-            
-            feed_selector = "div[role='feed']"
-            has_feed = await page.locator(feed_selector).count() > 0
-            
-            consecutive_no_new = 0
-            max_cycles = max(limit * 4, 150)
-            cycle = 0
-            
-            while extracted_count < limit and cycle < max_cycles:
-                cycle += 1
+            for loc in locations_to_scrape:
+                if extracted_count >= max_limit:
+                    break
+
+                search_query = f"{industry} in {loc}"
+                search_url = f"https://www.google.com/maps/search/{quote_plus(search_query)}"
+                logger.info("Navigating to Google Maps search for location", location=loc, url=search_url)
+                
+                try:
+                    await page.goto(search_url, timeout=60000)
+                    await page.wait_for_timeout(3500)
+                except Exception as goto_err:
+                    logger.warning("Failed loading search URL for location", location=loc, error=str(goto_err))
+                    continue
+
+                feed_selector = "div[role='feed']"
+                has_feed = await page.locator(feed_selector).count() > 0
+
+                consecutive_no_new = 0
+                max_cycles = 60
+                cycle = 0
+
+                while extracted_count < max_limit and cycle < max_cycles:
+                    cycle += 1
                 
                 # Fetch currently rendered place card links
                 cards = await page.locator("a.hfpxzc").all()
@@ -549,7 +565,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                         
                         # STREAM LIVE OVER WEBSOCKETS IMMEDIATELY!
                         if update_callback:
-                            await update_callback(lead_data, extracted_count, limit)
+                            await update_callback(lead_data, extracted_count, max_limit)
                             
                     except Exception as card_err:
                         logger.warning("Error processing card", error=str(card_err))
@@ -570,12 +586,12 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                 # Stop if no new cards loaded after 5 scroll attempts or reached end of list
                 end_of_results = await page.locator("text=\"You've reached the end of the list.\"").count() > 0
                 if end_of_results or consecutive_no_new >= 5:
-                    logger.info("Ending extraction feed scroll", total_extracted=extracted_count, end_reached=end_of_results)
+                    logger.info("Ending extraction feed scroll for location", total_extracted=extracted_count, end_reached=end_of_results)
                     break
                     
         finally:
             await browser.close()
             
-    logger.info("Scraping completed successfully", total_extracted=extracted_count, target_limit=limit)
+    logger.info("Scraping completed successfully", total_extracted=extracted_count, target_limit=max_limit)
     return extracted_count
 

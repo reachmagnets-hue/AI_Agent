@@ -404,6 +404,8 @@ export default function UnifiedLeadSourcingPage() {
                       <option value="50">50 leads</option>
                       <option value="100">100 leads</option>
                       <option value="250">250 leads</option>
+                      <option value="500">500 leads</option>
+                      <option value="0">⚡ Unlimited (All 70 Target Locations)</option>
                     </select>
                   </div>
 
