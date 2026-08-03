@@ -19,6 +19,25 @@ from app.services.retell_service import RetellService
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 logger = structlog.get_logger(__name__)
 
+class CallingSwitchRequest(BaseModel):
+    enabled: bool
+
+@router.get("/calling-switch")
+def get_calling_switch():
+    """Retrieve global Master AI Voice Calling Switch status"""
+    from app.core.config import get_settings
+    settings = get_settings()
+    return {"calling_enabled": getattr(settings, "CALLING_ENABLED", True)}
+
+@router.post("/calling-switch")
+def toggle_calling_switch(payload: CallingSwitchRequest):
+    """Toggle global Master AI Voice Calling Switch ON/OFF"""
+    from app.core.config import get_settings
+    settings = get_settings()
+    setattr(settings, "CALLING_ENABLED", payload.enabled)
+    logger.info("Master AI Voice Calling Switch updated", enabled=payload.enabled)
+    return {"calling_enabled": getattr(settings, "CALLING_ENABLED", True), "message": f"AI Voice Calling is now {'ENABLED' if payload.enabled else 'DISABLED'}"}
+
 @router.get("/")
 @router.get("")
 def get_campaigns(
@@ -595,22 +614,3 @@ def recampaign_leads(
     db.commit()
     
     return {"message": f"Successfully added {count} leads back to the pending queue.", "requeued_count": count}
-
-class CallingSwitchRequest(BaseModel):
-    enabled: bool
-
-@router.get("/calling-switch")
-def get_calling_switch():
-    """Retrieve global Master AI Voice Calling Switch status"""
-    from app.core.config import get_settings
-    settings = get_settings()
-    return {"calling_enabled": getattr(settings, "CALLING_ENABLED", True)}
-
-@router.post("/calling-switch")
-def toggle_calling_switch(payload: CallingSwitchRequest):
-    """Toggle global Master AI Voice Calling Switch ON/OFF"""
-    from app.core.config import get_settings
-    settings = get_settings()
-    setattr(settings, "CALLING_ENABLED", payload.enabled)
-    logger.info("Master AI Voice Calling Switch updated", enabled=payload.enabled)
-    return {"calling_enabled": getattr(settings, "CALLING_ENABLED", True), "message": f"AI Voice Calling is now {'ENABLED' if payload.enabled else 'DISABLED'}"}
