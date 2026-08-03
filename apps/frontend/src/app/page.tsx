@@ -66,6 +66,30 @@ export default function Dashboard() {
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
+  const { data: callingSwitchData, refetch: refetchCallingSwitch } = useQuery({
+    queryKey: ['calling-switch-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/campaigns/calling-switch');
+      if (!res.ok) throw new Error('Failed to fetch calling switch status');
+      return res.json();
+    }
+  });
+
+  const toggleCallingMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await fetch('/api/v1/campaigns/calling-switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      if (!res.ok) throw new Error('Failed to update calling switch status');
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchCallingSwitch();
+    }
+  });
+
   const getPriorityColor = (priority: string) => {
     switch (priority || 'normal') {
       case 'urgent': return 'text-red-500 font-semibold';
@@ -319,8 +343,26 @@ export default function Dashboard() {
                 </h2>
                 <p className="text-xs text-slate-300">Real-time daily targets & campaign window performance summary</p>
               </div>
-              <div className="flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-xs font-extrabold border border-emerald-500/40">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span> Live Tracking Active
+              <div className="flex flex-wrap items-center gap-3">
+                {/* 📞 MASTER CALLING ON/OFF SWITCH BUTTON */}
+                <button
+                  onClick={() => toggleCallingMutation.mutate(!callingSwitchData?.calling_enabled)}
+                  disabled={toggleCallingMutation.isPending}
+                  className={`px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-2 border shadow-sm transition-all ${
+                    callingSwitchData?.calling_enabled !== false
+                      ? 'bg-emerald-500 text-white border-emerald-400 hover:bg-emerald-600'
+                      : 'bg-rose-600 text-white border-rose-500 hover:bg-rose-700'
+                  }`}
+                  title="Click to Toggle Master AI Voice Calling Queue ON or OFF"
+                >
+                  <Phone className="h-3.5 w-3.5 fill-current" />
+                  <span>AI Calling: {callingSwitchData?.calling_enabled !== false ? 'ON (ACTIVE)' : 'OFF (PAUSED)'}</span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${callingSwitchData?.calling_enabled !== false ? 'bg-white animate-pulse' : 'bg-slate-300'}`}></span>
+                </button>
+
+                <div className="flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-full text-xs font-extrabold border border-emerald-500/40">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span> Live Tracking Active
+                </div>
               </div>
             </div>
 

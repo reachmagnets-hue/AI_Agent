@@ -139,7 +139,13 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                     if not is_within_email_send_window():
                         logger.info("Exiting campaign loop: outside allowed email send window", campaign_id=str(campaign_id))
                         break
-                else:
+                elif not is_linkedin:
+                    # Check Master Calling Switch for Voice Call campaigns
+                    from app.core.config import get_settings
+                    settings = get_settings()
+                    if not getattr(settings, "CALLING_ENABLED", True):
+                        logger.info("Exiting call campaign loop: Master AI Voice Calling switch is OFF", campaign_id=str(campaign_id))
+                        break
                     if not is_within_allowed_run_windows():
                         logger.info("Exiting campaign loop: outside allowed calling windows", campaign_id=str(campaign_id))
                         break

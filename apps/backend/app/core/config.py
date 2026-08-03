@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     BYPASS_TIME_GATING: bool = False
+    CALLING_ENABLED: bool = True
     TIMEZONE: str = "Asia/Kolkata"
     
     # IMAP Config

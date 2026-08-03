@@ -458,6 +458,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                             
                         # Fast website enrichment (emails, socials, meta summary)
                         email = None
+                        directories_map = {}
                         if website:
                             try:
                                 web_info = await asyncio.wait_for(find_website_details(website), timeout=5.0)
@@ -473,8 +474,8 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                                     twitter_url = web_info["twitter_url"]
                                 if not youtube_url and web_info["youtube_url"]:
                                     youtube_url = web_info["youtube_url"]
-                                dir_str = ""
                                 if web_info.get("directories"):
+                                    directories_map = web_info["directories"]
                                     dir_items = [f"{d_name}: {d_url}" for d_name, d_url in web_info["directories"].items()]
                                     dir_str = "\n[Directories] " + " | ".join(dir_items)
                                 if web_info["meta_description"]:
@@ -497,6 +498,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                             "youtube_url": youtube_url,
                             "rating": rating.strip() if rating else None,
                             "description": gmaps_desc.strip() if gmaps_desc else None,
+                            "directories": directories_map,
                             "is_duplicate": False
                         }
                         

@@ -26,6 +26,7 @@ interface ExtractedLead {
   rating?: string | null;
   description?: string | null;
   internal_notes?: string | null;
+  directories?: Record<string, string>;
   is_duplicate?: boolean;
 }
 
@@ -507,9 +508,9 @@ export default function UnifiedLeadSourcingPage() {
                       )}
 
                       {/* Social Media & Directories Links */}
-                      {(lead.facebook_url || lead.instagram_url || lead.linkedin_url || lead.twitter_url || lead.youtube_url) && (
+                      {(lead.facebook_url || lead.instagram_url || lead.linkedin_url || lead.twitter_url || lead.youtube_url || (lead.directories && Object.keys(lead.directories).length > 0)) && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Socials:</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Socials & Profiles:</span>
                           {lead.facebook_url && (
                             <a href={lead.facebook_url} target="_blank" rel="noreferrer" className="px-2 py-0.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[10px] font-semibold border border-blue-200 flex items-center gap-1">
                               📘 Facebook
@@ -535,6 +536,32 @@ export default function UnifiedLeadSourcingPage() {
                               ▶️ YouTube
                             </a>
                           )}
+
+                          {/* Directory Profiles */}
+                          {lead.directories && Object.entries(lead.directories).map(([dName, dUrl], dIdx) => {
+                            let badgeStyle = "bg-amber-50 text-amber-800 border-amber-200";
+                            let icon = "🌐";
+                            if (dName.toLowerCase().includes("yelp")) {
+                              badgeStyle = "bg-red-50 text-red-700 border-red-200";
+                              icon = "🔴 Yelp";
+                            } else if (dName.toLowerCase().includes("nextdoor")) {
+                              badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                              icon = "🟢 Nextdoor";
+                            } else if (dName.toLowerCase().includes("yellowpages") || dName.toLowerCase().includes("yp")) {
+                              badgeStyle = "bg-yellow-100 text-yellow-800 border-yellow-300";
+                              icon = "🟡 YellowPages";
+                            } else if (dName.toLowerCase().includes("bbb")) {
+                              badgeStyle = "bg-blue-100 text-blue-800 border-blue-300";
+                              icon = "🔵 BBB";
+                            } else {
+                              icon = `📌 ${dName}`;
+                            }
+                            return (
+                              <a key={dIdx} href={dUrl} target="_blank" rel="noreferrer" className={`px-2 py-0.5 rounded text-[10px] font-semibold border flex items-center gap-1 hover:opacity-80 ${badgeStyle}`}>
+                                {icon}
+                              </a>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
