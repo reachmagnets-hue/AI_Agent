@@ -48,6 +48,8 @@ export default function UnifiedLeadSourcingPage() {
 
   // SECTION 1: Google Maps Scraper Form States
   const [gmapsIndustry, setGmapsIndustry] = useState<string>('Auto Body Shop');
+  const [gmapsLocation, setGmapsLocation] = useState<string>('USA');
+  const [gmapsLimit, setGmapsLimit] = useState<string>('50');
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractedLeads, setExtractedLeads] = useState<ExtractedLead[]>([]);
   const [gmapsProgressText, setGmapsProgressText] = useState<string>('');
@@ -211,13 +213,17 @@ export default function UnifiedLeadSourcingPage() {
     }
     
     setIsExtracting(true);
-    setStatusMessage({ text: 'Sending Google Maps extraction request to server...', type: 'info' });
+    setStatusMessage({ text: `Sending Google Maps extraction request for ${gmapsIndustry} in ${gmapsLocation}...`, type: 'info' });
     
     try {
       const response = await fetch(`/api/v1/extraction/scrape`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ industry: gmapsIndustry, location: 'USA', limit: 50 })
+        body: JSON.stringify({
+          industry: gmapsIndustry,
+          location: gmapsLocation || 'USA',
+          limit: parseInt(gmapsLimit, 10) || 50
+        })
       });
       
       if (!response.ok) throw new Error('Failed to initiate scraper task');
@@ -356,21 +362,48 @@ export default function UnifiedLeadSourcingPage() {
           <div className="lg:col-span-1 space-y-4">
             <Card className="glass-card shadow-md border border-slate-200/80">
               <CardHeader className="border-b border-slate-100 pb-3">
-                <CardTitle className="text-base font-bold text-slate-800">Extraction Industry</CardTitle>
-                <CardDescription className="text-xs">Specify target industry instruction for Google Maps scraping.</CardDescription>
+                <CardTitle className="text-base font-bold text-slate-800">Extraction Controls</CardTitle>
+                <CardDescription className="text-xs">Specify target industry, location, and limit for automated extraction.</CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
                 <form onSubmit={handleStartGmapsExtraction} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Industry / Shop Type Instruction</label>
+                    <label className="text-xs font-bold text-slate-700">Industry / Keyword Instruction</label>
                     <Input
                       value={gmapsIndustry}
                       onChange={(e) => setGmapsIndustry(e.target.value)}
                       placeholder="e.g. automotive, roofers, dentist"
                       required
                       disabled={isExtracting}
-                      className="bg-white/90 border-slate-200"
+                      className="bg-white/90 border-slate-200 text-xs"
                     />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Target Location / City / State</label>
+                    <Input
+                      value={gmapsLocation}
+                      onChange={(e) => setGmapsLocation(e.target.value)}
+                      placeholder="e.g. USA, New York, CA, Texas"
+                      required
+                      disabled={isExtracting}
+                      className="bg-white/90 border-slate-200 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Lead Extraction Limit</label>
+                    <select
+                      value={gmapsLimit}
+                      onChange={(e) => setGmapsLimit(e.target.value)}
+                      disabled={isExtracting}
+                      className="w-full bg-white/90 border border-slate-200 rounded-md p-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="20">20 leads</option>
+                      <option value="50">50 leads</option>
+                      <option value="100">100 leads</option>
+                      <option value="250">250 leads</option>
+                    </select>
                   </div>
 
                   <Button
@@ -379,7 +412,7 @@ export default function UnifiedLeadSourcingPage() {
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-10 text-xs flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     {isExtracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
-                    <span>Start Google Maps Scrape</span>
+                    <span>Start Extraction</span>
                   </Button>
                 </form>
               </CardContent>
@@ -391,7 +424,7 @@ export default function UnifiedLeadSourcingPage() {
               </CardHeader>
               <CardContent className="pt-3">
                 <div className="text-xs text-slate-200 font-mono bg-slate-900 p-3.5 rounded-xl shadow-inner min-h-[90px] leading-relaxed break-all">
-                  {gmapsProgressText || 'Ready. Enter Industry instruction and click "Start Google Maps Scrape".'}
+                  {gmapsProgressText || 'Ready. Enter Industry & Location and click "Start Extraction".'}
                 </div>
               </CardContent>
             </Card>
@@ -399,12 +432,12 @@ export default function UnifiedLeadSourcingPage() {
 
           {/* Results Listings */}
           <div className="lg:col-span-2">
-            <Card className="glass-card shadow-md border border-slate-200/60 flex flex-col h-[480px] overflow-hidden">
+            <Card className="glass-card shadow-md border border-slate-200/60 flex flex-col h-[520px] overflow-hidden">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-3">
                 <div className="flex justify-between items-center">
                   <div>
-                    <CardTitle className="text-base font-bold text-slate-800">Extracted Listings & Verified Emails</CardTitle>
-                    <CardDescription className="text-xs">Real-time stream of extracted businesses from Google Maps</CardDescription>
+                    <CardTitle className="text-base font-bold text-slate-800">Extracted Listings & Social Media Details</CardTitle>
+                    <CardDescription className="text-xs">Real-time stream of extracted businesses with contact info, social links & directories</CardDescription>
                   </div>
                   <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold">
                     {extractedLeads.length} listings
@@ -417,16 +450,23 @@ export default function UnifiedLeadSourcingPage() {
                     <Building2 className="h-12 w-12 mb-3 text-slate-300" />
                     <p className="text-sm font-semibold">No businesses extracted yet</p>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      Specify industry instruction on the left to launch extraction.
+                      Specify industry & location instructions on the left to launch extraction.
                     </p>
                   </div>
                 ) : (
                   extractedLeads.map((lead, idx) => (
-                    <div key={idx} className="p-3.5 rounded-xl border border-slate-200/60 bg-white/80 shadow-sm space-y-2">
+                    <div key={idx} className="p-3.5 rounded-xl border border-slate-200/60 bg-white/80 shadow-sm space-y-2.5">
                       <div className="flex items-start justify-between">
-                        <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                          <Building2 className="h-4 w-4 text-indigo-600" /> {lead.name}
-                        </h4>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                            <Building2 className="h-4 w-4 text-indigo-600 shrink-0" /> {lead.name}
+                          </h4>
+                          {lead.rating && (
+                            <span className="text-[11px] font-semibold text-amber-600 flex items-center gap-1 mt-0.5">
+                              ⭐ {lead.rating}
+                            </span>
+                          )}
+                        </div>
                         {lead.email ? (
                           <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold">
                             ✉️ Email Found
@@ -439,18 +479,62 @@ export default function UnifiedLeadSourcingPage() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600">
-                        {lead.phone && <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-slate-400" /> {lead.phone}</div>}
+                        {lead.phone && <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-slate-400 shrink-0" /> {lead.phone}</div>}
                         {lead.website && (
                           <div className="flex items-center gap-1 truncate">
-                            <Globe className="h-3 w-3 text-slate-400" />
-                            <a href={lead.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">{lead.website}</a>
+                            <Globe className="h-3 w-3 text-slate-400 shrink-0" />
+                            <a href={lead.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline truncate">{lead.website}</a>
+                          </div>
+                        )}
+                        {lead.address && (
+                          <div className="col-span-1 md:col-span-2 flex items-center gap-1 text-[11px] text-slate-500 truncate">
+                            <MapPin className="h-3 w-3 text-slate-400 shrink-0" /> {lead.address}
                           </div>
                         )}
                       </div>
 
+                      {lead.description && (
+                        <p className="text-[11px] text-slate-600 line-clamp-2 italic bg-slate-50 p-2 rounded border border-slate-100">
+                          "{lead.description}"
+                        </p>
+                      )}
+
                       {lead.email && (
-                        <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 p-1.5 rounded-md font-mono">
-                          {lead.email}
+                        <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 p-1.5 rounded-md font-mono flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>{lead.email}</span>
+                        </div>
+                      )}
+
+                      {/* Social Media & Directories Links */}
+                      {(lead.facebook_url || lead.instagram_url || lead.linkedin_url || lead.twitter_url || lead.youtube_url) && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Socials:</span>
+                          {lead.facebook_url && (
+                            <a href={lead.facebook_url} target="_blank" rel="noreferrer" className="px-2 py-0.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[10px] font-semibold border border-blue-200 flex items-center gap-1">
+                              📘 Facebook
+                            </a>
+                          )}
+                          {lead.instagram_url && (
+                            <a href={lead.instagram_url} target="_blank" rel="noreferrer" className="px-2 py-0.5 bg-pink-50 text-pink-700 hover:bg-pink-100 rounded text-[10px] font-semibold border border-pink-200 flex items-center gap-1">
+                              📷 Instagram
+                            </a>
+                          )}
+                          {lead.linkedin_url && (
+                            <a href={lead.linkedin_url} target="_blank" rel="noreferrer" className="px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded text-[10px] font-semibold border border-sky-200 flex items-center gap-1">
+                              💼 LinkedIn
+                            </a>
+                          )}
+                          {lead.twitter_url && (
+                            <a href={lead.twitter_url} target="_blank" rel="noreferrer" className="px-2 py-0.5 bg-slate-100 text-slate-800 hover:bg-slate-200 rounded text-[10px] font-semibold border border-slate-300 flex items-center gap-1">
+                              🐦 Twitter/X
+                            </a>
+                          )}
+                          {lead.youtube_url && (
+                            <a href={lead.youtube_url} target="_blank" rel="noreferrer" className="px-2 py-0.5 bg-red-50 text-red-700 hover:bg-red-100 rounded text-[10px] font-semibold border border-red-200 flex items-center gap-1">
+                              ▶️ YouTube
+                            </a>
+                          )}
                         </div>
                       )}
                     </div>

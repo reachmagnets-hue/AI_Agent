@@ -28,7 +28,7 @@ def trigger_email_inbox_sync(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_sync)
     return {"message": "Email Inbox AI Sync scheduled in the background."}
 
-@router.get("/track/open/{lead_id}")
+@router.api_route("/track/open/{lead_id}", methods=["GET", "HEAD"])
 def track_email_open(lead_id: UUID, db: Session = Depends(get_db)):
     """Tracking pixel endpoint returned as a transparent 1x1 pixel image"""
     logger.info("Email open tracked", lead_id=str(lead_id))
@@ -45,7 +45,7 @@ def track_email_open(lead_id: UUID, db: Session = Depends(get_db)):
     
     return Response(content=GIF_1X1, media_type="image/gif")
 
-@router.get("/track/click/{lead_id}")
+@router.api_route("/track/click/{lead_id}", methods=["GET", "HEAD"])
 def track_email_click(lead_id: UUID, url: str, db: Session = Depends(get_db)):
     """Redirect link tracker endpoint"""
     logger.info("Email click tracked", lead_id=str(lead_id), redirect_url=url)

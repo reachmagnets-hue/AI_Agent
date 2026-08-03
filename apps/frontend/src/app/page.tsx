@@ -387,48 +387,48 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {/* 1. Extracted Leads Yesterday */}
+              {/* 1. Extracted Leads Yesterday / Last Batch */}
               <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all">
                 <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Users className="h-3.5 w-3.5 text-slate-400" /> Extracted Leads
                 </div>
                 <div className="text-2xl font-black text-white">
-                  +{(displayStats.leadsYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-slate-300">Leads</span>
+                  +{(displayStats.leadsYesterday > 0 ? displayStats.leadsYesterday : (displayStats.lastActiveLeadsCount || 0)).toLocaleString()} <span className="text-xs font-normal text-slate-300">Leads</span>
                 </div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">
                   {displayStats.leadsYesterday > 0 
                     ? 'Scraped Yesterday' 
-                    : (displayStats.lastActiveLeadsDate ? `Last Batch (${fmtDate(displayStats.lastActiveLeadsDate)}): +${displayStats.lastActiveLeadsCount}` : 'No Recent Extraction')}
+                    : (displayStats.lastActiveLeadsDate ? `Last Batch: ${fmtDate(displayStats.lastActiveLeadsDate)}` : 'No Recent Extraction')}
                 </div>
               </div>
 
-              {/* 2. Email Outreach Yesterday */}
+              {/* 2. Email Outreach Yesterday / Last Batch */}
               <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all">
                 <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Mail className="h-3.5 w-3.5 text-emerald-400" /> Email Outreach
                 </div>
                 <div className="text-2xl font-black text-white">
-                  {(displayStats.emailSentYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Sent</span>
+                  {(displayStats.emailSentYesterday > 0 ? displayStats.emailSentYesterday : (displayStats.lastActiveEmailCount || 0)).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Sent</span>
                 </div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">
                   {displayStats.emailSentYesterday > 0 
                     ? `Delivered: ${(displayStats.emailDelivered || 0).toLocaleString()}` 
-                    : (displayStats.lastActiveEmailDate ? `Last Batch (${fmtDate(displayStats.lastActiveEmailDate)}): ${displayStats.lastActiveEmailCount} Sent` : 'Delivered: 0')}
+                    : (displayStats.lastActiveEmailDate ? `Last Batch: ${fmtDate(displayStats.lastActiveEmailDate)}` : 'Delivered: 0')}
                 </div>
               </div>
 
-              {/* 3. Voice Calls Yesterday */}
+              {/* 3. Voice Calls Yesterday / Last Batch */}
               <div className="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/15 hover:bg-white/15 transition-all">
                 <div className="text-xs font-bold text-pink-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Phone className="h-3.5 w-3.5 text-pink-400" /> Voice Calls
                 </div>
                 <div className="text-2xl font-black text-white">
-                  {(displayStats.callsYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-pink-200">Calls</span>
+                  {(displayStats.callsYesterday > 0 ? displayStats.callsYesterday : (displayStats.lastActiveCallsCount || 0)).toLocaleString()} <span className="text-xs font-normal text-pink-200">Calls</span>
                 </div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">
                   {displayStats.callsYesterday > 0 
                     ? 'Recorded Calls' 
-                    : (displayStats.lastActiveCallsDate ? `Last Batch (${fmtDate(displayStats.lastActiveCallsDate)}): ${displayStats.lastActiveCallsCount} Calls` : 'Recorded Calls')}
+                    : (displayStats.lastActiveCallsDate ? `Last Batch: ${fmtDate(displayStats.lastActiveCallsDate)}` : 'Recorded Calls')}
                 </div>
               </div>
 
@@ -437,7 +437,7 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
                   <Linkedin className="h-3.5 w-3.5 text-blue-400" /> LinkedIn Autopilot
                 </div>
-                <div className="text-2xl font-black text-white">{(displayStats.linkedinSentYesterday || 0).toLocaleString()} <span className="text-xs font-normal text-blue-200">Sent</span></div>
+                <div className="text-2xl font-black text-white">{(displayStats.linkedinSentToday || displayStats.linkedinSent || 0).toLocaleString()} <span className="text-xs font-normal text-blue-200">Sent</span></div>
                 <div className="text-[10px] text-slate-300 mt-1 font-medium">Scraped & Outreach</div>
               </div>
 
