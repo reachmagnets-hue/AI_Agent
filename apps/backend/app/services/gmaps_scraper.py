@@ -438,9 +438,9 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                             continue
                             
                         # Deduplication check
-                        norm_name = re.sub(r'\W+', '', str(name).lower()) if name else ""
-                        clean_phone = re.sub(r'\D+', '', str(phone)) if phone else ""
-                        clean_web = str(website).lower().replace("https://", "").replace("http://", "").replace("www.", "").strip("/") if website else ""
+                        norm_name = re.sub(r'\W+', '', name.lower()) if name else ""
+                        clean_phone = re.sub(r'\D+', '', phone) if phone else ""
+                        clean_web = website.lower().replace("https://", "").replace("http://", "").replace("www.", "").strip("/") if website else ""
                         
                         is_duplicate = (norm_name and norm_name in seen_names) or (clean_phone and clean_phone in seen_phones) or (clean_web and clean_web in seen_websites)
                         
@@ -459,6 +459,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                         # Fast website enrichment (emails, socials, meta summary)
                         email = None
                         directories_map = {}
+                        dir_str = ""
                         if website:
                             try:
                                 web_info = await asyncio.wait_for(find_website_details(website), timeout=5.0)
@@ -482,8 +483,6 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                                     gmaps_desc = f"{gmaps_desc} • {web_info['meta_description']}" if gmaps_desc else web_info['meta_description']
                             except Exception as web_err:
                                 logger.debug("Quick website enrichment skipped/timed out", url=website, error=str(web_err))
-                        else:
-                            dir_str = ""
                                 
                         lead_data = {
                             "name": name.strip(),
