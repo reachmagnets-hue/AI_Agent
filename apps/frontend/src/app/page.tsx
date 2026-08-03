@@ -373,7 +373,7 @@ export default function Dashboard() {
                   <MapPin className="h-3.5 w-3.5 text-purple-400" /> Extracted Today
                 </div>
                 <div className="text-2xl font-black text-white">+{(displayStats.leadsToday || 0).toLocaleString()} <span className="text-xs font-normal text-violet-200">Leads</span></div>
-                <div className="text-[10px] text-slate-300 mt-1 font-medium">Target: 450 / Day</div>
+                <div className="text-[10px] text-emerald-300 font-bold flex items-center gap-1 mt-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Continuous Extraction</div>
               </div>
 
               {/* 2. Emails Sent Today */}
