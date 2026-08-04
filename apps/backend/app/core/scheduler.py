@@ -50,7 +50,7 @@ TARGET_LOCATIONS: List[str] = [
     "Sydney, New South Wales, Australia"
 ]
 
-MAX_LEADS_PER_EXTRACTION = 75
+MAX_LEADS_PER_EXTRACTION = 500
 MAX_NIGHTLY_EMAILS = 450
 EMAIL_STAGGER_DELAY_SECONDS = 45
 
@@ -105,11 +105,12 @@ class MasterAutonomousScheduler:
             current_minute = now_local.minute
             today_str = now_local.strftime("%Y-%m-%d")
 
-            # Reset nightly email count at 18:00 PM
-            if current_hour == 18 and self.current_night_date != today_str:
+            # Reset nightly email count at 18:00 PM (6 PM IST)
+            night_key = f"{today_str}_18"
+            if current_hour == 18 and self.current_night_date != night_key:
                 self.nightly_emails_sent = 0
-                self.current_night_date = today_str
-                logger.info("🌙 Resetting nightly email counter to 0 for window (6 PM - 6 AM).")
+                self.current_night_date = night_key
+                logger.info("🌙 Resetting nightly email counter to 0 for 6 PM - 6 AM IST window.")
 
             # ---------------------------------------------------------------
             # 🏖️ WEEKEND BREAK (Saturday & Sunday Holiday)

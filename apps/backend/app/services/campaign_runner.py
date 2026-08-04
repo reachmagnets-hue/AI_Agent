@@ -136,8 +136,12 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
 
                 # Check time window based on campaign type
                 if is_email:
+                    from app.core.scheduler import scheduler, MAX_NIGHTLY_EMAILS
+                    if scheduler.nightly_emails_sent >= MAX_NIGHTLY_EMAILS:
+                        logger.info("Exiting email campaign loop: Nightly limit reached for window (450 max)", campaign_id=str(campaign_id), sent_tonight=scheduler.nightly_emails_sent)
+                        break
                     if not is_within_email_send_window():
-                        logger.info("Exiting campaign loop: outside allowed email send window", campaign_id=str(campaign_id))
+                        logger.info("Exiting campaign loop: outside allowed email send window (6 PM - 6 AM IST)", campaign_id=str(campaign_id))
                         break
                 elif not is_linkedin:
                     # Check Master Calling Switch for Voice Call campaigns
@@ -164,33 +168,18 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 # Pull next pending lead (excluding bounced leads)
                 from sqlalchemy import or_ as sa_or_
                 if is_email:
-                    if camp_name.lower().strip() in ["all_email", "all_email ", "e mail", "email", "all email"]:
-                        lead = db.query(Lead).filter(
-                            Lead.email_sent_at.is_(None),
-                            Lead.email.isnot(None),
-                            Lead.email != "",
-                            sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
-                            sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
-                            sa_or_(
-                                Lead.email_status.is_(None),
-                                Lead.email_status != "bounced"
-                            ),
-                            Lead.email_bounced_at.is_(None)
-                        ).order_by(Lead.created_at).first()
-                    else:
-                        lead = db.query(Lead).filter(
-                            uuid_match(Lead.campaign_id, campaign_id),
-                            Lead.email_sent_at.is_(None),
-                            Lead.email.isnot(None),
-                            Lead.email != "",
-                            sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
-                            sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
-                            sa_or_(
-                                Lead.email_status.is_(None),
-                                Lead.email_status != "bounced"
-                            ),
-                            Lead.email_bounced_at.is_(None)
-                        ).order_by(Lead.created_at).first()
+                    lead = db.query(Lead).filter(
+                        Lead.email_sent_at.is_(None),
+                        Lead.email.isnot(None),
+                        Lead.email != "",
+                        sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                        sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
+                        sa_or_(
+                            Lead.email_status.is_(None),
+                            Lead.email_status != "bounced"
+                        ),
+                        Lead.email_bounced_at.is_(None)
+                    ).order_by(Lead.created_at).first()
                 else:
                     lead = db.query(Lead).filter(
                         uuid_match(Lead.campaign_id, campaign_id),
