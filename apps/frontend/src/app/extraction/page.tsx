@@ -60,6 +60,35 @@ export default function UnifiedLeadSourcingPage() {
   const [leadFilter, setLeadFilter] = useState<'all' | 'email' | 'phone' | 'social' | 'website'>('all');
   const [folderSearch, setFolderSearch] = useState<string>('');
 
+  // Poll Server-Side Background Extraction Status
+  const { data: serverExtractionStatus } = useQuery({
+    queryKey: ['server-extraction-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/extraction/status');
+      if (!res.ok) return null;
+      return res.json();
+    },
+    refetchInterval: (query) => (query.state.data?.is_running ? 2000 : 4000)
+  });
+
+  useEffect(() => {
+    if (serverExtractionStatus) {
+      if (serverExtractionStatus.is_running) {
+        setIsExtracting(true);
+        if (serverExtractionStatus.progress_text) {
+          setGmapsProgressText(`[Google Maps Background Task] ${serverExtractionStatus.progress_text}`);
+        }
+      } else if (isExtracting && !serverExtractionStatus.is_running) {
+        setIsExtracting(false);
+        if (serverExtractionStatus.progress_text) {
+          setGmapsProgressText(`[Google Maps Background Task] ${serverExtractionStatus.progress_text}`);
+        }
+        queryClient.invalidateQueries({ queryKey: ['db-folder-leads'] });
+        queryClient.invalidateQueries({ queryKey: ['db-lead-folders'] });
+      }
+    }
+  }, [serverExtractionStatus, isExtracting, queryClient]);
+
   // Fetch Available Industry Folders from Database
   const { data: dbFoldersData, refetch: refetchFolders } = useQuery<{ industries: string[] }>({
     queryKey: ['db-lead-folders'],
