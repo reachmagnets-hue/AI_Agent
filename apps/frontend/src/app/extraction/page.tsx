@@ -55,6 +55,73 @@ export default function UnifiedLeadSourcingPage() {
   const [extractedLeads, setExtractedLeads] = useState<ExtractedLead[]>([]);
   const [gmapsProgressText, setGmapsProgressText] = useState<string>('');
 
+  // Folder Explorer & Filtering States
+  const [selectedFolder, setSelectedFolder] = useState<string>('all');
+  const [leadFilter, setLeadFilter] = useState<'all' | 'email' | 'phone' | 'social' | 'website'>('all');
+  const [folderSearch, setFolderSearch] = useState<string>('');
+
+  // Fetch Available Industry Folders from Database
+  const { data: dbFoldersData, refetch: refetchFolders } = useQuery<{ industries: string[] }>({
+    queryKey: ['db-lead-folders'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/leads/industries');
+      if (!res.ok) throw new Error('Failed fetching folders');
+      return res.json();
+    }
+  });
+
+  // Fetch Database Leads for Selected Folder & Filters
+  const { data: dbLeadsData, refetch: refetchDbLeads, isLoading: isLeadsLoading } = useQuery({
+    queryKey: ['db-folder-leads', selectedFolder, leadFilter, folderSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedFolder !== 'all') params.append('business_type', selectedFolder);
+      if (leadFilter === 'email') params.append('has_email', 'true');
+      if (leadFilter === 'phone') params.append('has_phone', 'true');
+      if (leadFilter === 'social') params.append('has_social', 'true');
+      if (folderSearch) params.append('search', folderSearch);
+      params.append('limit', '200');
+
+      const res = await fetch(`/api/v1/leads/?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed fetching leads');
+      return res.json();
+    }
+  });
+
+  // Combined leads list (merging live extracted leads with DB leads)
+  const displayLeads: ExtractedLead[] = React.useMemo(() => {
+    if (extractedLeads.length > 0 && selectedFolder === 'all') {
+      return extractedLeads.filter(l => {
+        if (leadFilter === 'email' && !l.email) return false;
+        if (leadFilter === 'phone' && !l.phone) return false;
+        if (leadFilter === 'website' && !l.website) return false;
+        if (leadFilter === 'social' && !(l.facebook_url || l.instagram_url || l.linkedin_url || l.twitter_url || l.youtube_url)) return false;
+        if (folderSearch) {
+          const s = folderSearch.toLowerCase();
+          return (l.name?.toLowerCase().includes(s) || l.phone?.includes(s) || l.email?.toLowerCase().includes(s) || l.address?.toLowerCase().includes(s));
+        }
+        return true;
+      });
+    }
+
+    if (!dbLeadsData?.leads) return [];
+    return dbLeadsData.leads.map((l: any) => ({
+      name: l.business_name || l.full_name || 'Unnamed Business',
+      phone: l.phone,
+      website: l.website,
+      address: l.internal_notes?.includes('Full Address: ') ? l.internal_notes.split('Full Address: ')[1].split('Yelp')[0].split('🔵')[0].trim() : l.internal_notes,
+      email: l.email,
+      facebook_url: l.facebook_url,
+      instagram_url: l.instagram_url,
+      linkedin_url: l.linkedin_url,
+      twitter_url: l.twitter_url,
+      youtube_url: l.youtube_url,
+      rating: l.rating,
+      description: l.description,
+      directories: {}
+    }));
+  }, [extractedLeads, dbLeadsData, selectedFolder, leadFilter, folderSearch]);
+
   // SECTION 2: LinkedIn Prospecting Form States
   const [linkedinIndustry, setLinkedinIndustry] = useState<string>('Auto Body Shop');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
@@ -424,35 +491,92 @@ export default function UnifiedLeadSourcingPage() {
           </div>
 
           {/* Results Listings */}
-          <div className="lg:col-span-2">
-            <Card className="glass-card shadow-md border border-slate-200/60 flex flex-col h-[520px] overflow-hidden">
+          <div className="lg:col-span-2 space-y-3">
+            {/* Industry Folder Explorer & Filters Bar */}
+            <div className="bg-white/80 backdrop-blur-md p-3.5 rounded-xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-[220px]">
+                <Layers className="h-4 w-4 text-indigo-600 shrink-0" />
+                <select
+                  value={selectedFolder}
+                  onChange={(e) => setSelectedFolder(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-lg p-1.5 focus:ring-2 focus:ring-indigo-500 w-full"
+                >
+                  <option value="all">📁 All Industry Folders (DB + Live)</option>
+                  {dbFoldersData?.industries?.map((ind, i) => (
+                    <option key={i} value={ind}>📁 Folder: {ind}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quick Filter Chips */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg border transition-all ${leadFilter === 'all' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                >
+                  All ({displayLeads.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter('email')}
+                  className={`px-2.5 py-1 rounded-lg border flex items-center gap-1 transition-all ${leadFilter === 'email' ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'}`}
+                >
+                  ✉️ Emails Only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter('phone')}
+                  className={`px-2.5 py-1 rounded-lg border flex items-center gap-1 transition-all ${leadFilter === 'phone' ? 'bg-sky-600 text-white border-sky-600 shadow-sm' : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100'}`}
+                >
+                  📞 Phones Only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeadFilter('social')}
+                  className={`px-2.5 py-1 rounded-lg border flex items-center gap-1 transition-all ${leadFilter === 'social' ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100'}`}
+                >
+                  📱 Social Profiles
+                </button>
+              </div>
+            </div>
+
+            <Card className="glass-card shadow-md border border-slate-200/60 flex flex-col h-[500px] overflow-hidden">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-3">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-                      <span>Extracted Listings</span>
+                      <span>Folder Access: {selectedFolder === 'all' ? 'All Industry Folders' : selectedFolder}</span>
                       <span className="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-lg text-xs font-extrabold border border-indigo-200">
-                        📁 Folder: {gmapsIndustry || 'Auto Body Care'}
+                        {displayLeads.length} leads
                       </span>
                     </CardTitle>
-                    <CardDescription className="text-xs">Real-time extracted leads grouped into Industry Folder with phones, emails, socials & directory links (Yelp, BBB, YellowPages)</CardDescription>
+                    <CardDescription className="text-xs">Browsing industry folder records with contact info, emails, phones, socials & directory links</CardDescription>
                   </div>
-                  <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-extrabold shadow-sm">
-                    {extractedLeads.length} listings extracted
-                  </span>
+
+                  {/* Search inside folder */}
+                  <div className="relative min-w-[180px]">
+                    <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                    <Input
+                      value={folderSearch}
+                      onChange={(e) => setFolderSearch(e.target.value)}
+                      placeholder="Search inside folder..."
+                      className="pl-8 text-xs h-8 bg-white border-slate-200"
+                    />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto p-4 space-y-3">
-                {extractedLeads.length === 0 ? (
+                {displayLeads.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400">
                     <Building2 className="h-12 w-12 mb-3 text-slate-300" />
-                    <p className="text-sm font-semibold">No businesses extracted yet</p>
+                    <p className="text-sm font-semibold">No leads match current folder or filter criteria</p>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      Specify industry & location instructions on the left to launch extraction.
+                      Select another folder or launch extraction to harvest new leads.
                     </p>
                   </div>
                 ) : (
-                  extractedLeads.map((lead, idx) => (
+                  displayLeads.map((lead, idx) => (
                     <div key={idx} className="p-3.5 rounded-xl border border-slate-200/60 bg-white/80 shadow-sm space-y-2.5">
                       <div className="flex items-start justify-between">
                         <div>
@@ -477,11 +601,11 @@ export default function UnifiedLeadSourcingPage() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600">
-                        {lead.phone && <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-slate-400 shrink-0" /> {lead.phone}</div>}
+                        {lead.phone && <div className="flex items-center gap-1 font-semibold"><Phone className="h-3 w-3 text-slate-400 shrink-0" /> {lead.phone}</div>}
                         {lead.website && (
                           <div className="flex items-center gap-1 truncate">
                             <Globe className="h-3 w-3 text-slate-400 shrink-0" />
-                            <a href={lead.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline truncate">{lead.website}</a>
+                            <a href={lead.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline truncate font-semibold">{lead.website}</a>
                           </div>
                         )}
                         {lead.address && (
