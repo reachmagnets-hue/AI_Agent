@@ -22,15 +22,29 @@ from fastapi.responses import StreamingResponse
 # ─── STATIC ROUTES FIRST (before any /{lead_id} dynamic routes) ───────────────
 
 @router.get("/industries")
-def get_lead_industries(db: Session = Depends(get_db)):
-    """Retrieve distinct active canonical industries (business_types) from leads table"""
+def get_lead_industries(source: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """Retrieve distinct active canonical industries (business_types) from leads table, optionally filtered by source"""
     from app.utils.industry_normalizer import normalize_industry_name
-    results = db.query(Lead.business_type).filter(
+    query = db.query(Lead.business_type).filter(
         Lead.business_type.isnot(None),
         Lead.business_type != "",
         Lead.is_active == True
-    ).distinct().all()
+    )
     
+    if source and source.lower() != "all":
+        s_low = source.lower()
+        if s_low in ["gmaps", "google_maps", "google_maps_scrape"]:
+            query = query.filter(Lead.source == "google_maps_scrape")
+        elif s_low in ["screenshot", "screenshot_extract", "ocr"]:
+            query = query.filter(or_(Lead.source == "screenshot_extract", Lead.source == "screenshot_ocr", Lead.internal_notes.ilike("%screenshot%")))
+        elif s_low in ["csv", "csv_import", "csv_upload"]:
+            query = query.filter(or_(Lead.source == "csv_import", Lead.source == "csv_upload", Lead.source.ilike("%.csv%")))
+        elif s_low in ["linkedin", "linkedin_prospect", "linkedin_autopilot"]:
+            query = query.filter(or_(Lead.source == "linkedin_autopilot", Lead.source == "linkedin_scrape", Lead.source == "linkedin_prospect"))
+        else:
+            query = query.filter(Lead.source == source)
+            
+    results = query.distinct().all()
     canonical_set = set()
     for r in results:
         if r[0]:

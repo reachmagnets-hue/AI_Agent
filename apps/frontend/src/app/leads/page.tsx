@@ -60,9 +60,10 @@ export default function LeadsPage() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
 
   const { data: industriesData } = useQuery<{ industries: string[] }>({
-    queryKey: ['lead-industries-list'],
+    queryKey: ['lead-industries-list', leadSource],
     queryFn: async () => {
-      const res = await fetch('/api/v1/leads/industries');
+      const url = leadSource && leadSource !== 'all' ? `/api/v1/leads/industries?source=${encodeURIComponent(leadSource)}` : '/api/v1/leads/industries';
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch industries');
       return res.json();
     }
@@ -563,7 +564,7 @@ export default function LeadsPage() {
         <div className="flex flex-wrap gap-2 text-xs font-bold">
           <button
             type="button"
-            onClick={() => { setLeadSource('all'); setPage(1); }}
+            onClick={() => { setLeadSource('all'); setBusinessType('all'); setPage(1); }}
             className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
               leadSource === 'all'
                 ? 'bg-primary text-primary-foreground border-primary'
@@ -575,7 +576,7 @@ export default function LeadsPage() {
 
           <button
             type="button"
-            onClick={() => { setLeadSource('gmaps'); setPage(1); }}
+            onClick={() => { setLeadSource('gmaps'); setBusinessType('all'); setPage(1); }}
             className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
               leadSource === 'gmaps'
                 ? 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-500/20'
@@ -587,7 +588,7 @@ export default function LeadsPage() {
 
           <button
             type="button"
-            onClick={() => { setLeadSource('screenshot'); setPage(1); }}
+            onClick={() => { setLeadSource('screenshot'); setBusinessType('all'); setPage(1); }}
             className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
               leadSource === 'screenshot'
                 ? 'bg-purple-600 text-white border-purple-600 ring-2 ring-purple-500/20'
@@ -599,7 +600,7 @@ export default function LeadsPage() {
 
           <button
             type="button"
-            onClick={() => { setLeadSource('csv'); setPage(1); }}
+            onClick={() => { setLeadSource('csv'); setBusinessType('all'); setPage(1); }}
             className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
               leadSource === 'csv'
                 ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/20'
@@ -611,7 +612,7 @@ export default function LeadsPage() {
 
           <button
             type="button"
-            onClick={() => { setLeadSource('linkedin'); setPage(1); }}
+            onClick={() => { setLeadSource('linkedin'); setBusinessType('all'); setPage(1); }}
             className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
               leadSource === 'linkedin'
                 ? 'bg-sky-600 text-white border-sky-600 ring-2 ring-sky-500/20'
