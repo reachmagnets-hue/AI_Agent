@@ -635,15 +635,9 @@ export default function Dashboard() {
                   <span className="text-slate-500 font-medium flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-emerald-500" /> Replies</span>
                   <span className="font-bold text-emerald-600">{(displayStats.emailReplied || 0).toLocaleString()}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                  <div className="flex justify-between items-center text-rose-500 font-medium">
-                    <span>Bounced Leads:</span>
-                    <span className="font-bold">{displayStats.emailBounced || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-rose-600 font-medium">
-                    <span>Inbox Bounce Emails:</span>
-                    <span className="font-bold">{displayStats.rawBounceMessages || 0}</span>
-                  </div>
+                <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-100 mt-1 text-rose-500 font-medium">
+                  <span className="flex items-center gap-1.5"><AlertCircle className="h-4 w-4 text-rose-500" /> Bounced Emails</span>
+                  <span className="font-bold">{(displayStats.emailBounced || 0).toLocaleString()}</span>
                 </div>
               </CardContent>
             </Card>
