@@ -547,6 +547,48 @@ export default function LeadsPage() {
         </Card>
       </div>
 
+      {/* Industry Folders Hub */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-foreground flex items-center gap-2">
+            <span className="text-lg">📁</span> Industry Lead Folders
+          </h3>
+          <span className="text-xs font-semibold text-muted-foreground">
+            Click any folder to view stored leads for that industry
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2.5">
+          <button
+            type="button"
+            onClick={() => { setBusinessType('all'); setPage(1); }}
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${
+              businessType === 'all'
+                ? 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-500/30'
+                : 'bg-card text-foreground border-muted-foreground/15 hover:bg-accent/50'
+            }`}
+          >
+            <span>📁 All Industry Folders</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-white/20">All</span>
+          </button>
+
+          {industriesData?.industries?.map((ind, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => { setBusinessType(ind); setPage(1); }}
+              className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-2 shadow-sm ${
+                businessType === ind
+                  ? 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-500/30'
+                  : 'bg-card text-foreground border-muted-foreground/15 hover:bg-accent/50'
+              }`}
+            >
+              <span>📁 {ind}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Subsections/Tabs */}
       <div className="flex space-x-2 border-b border-muted-foreground/10 pb-2">
         {(['all', 'phone', 'email', 'linkedin', 'social'] as const).map((tab) => (
