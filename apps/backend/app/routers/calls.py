@@ -215,28 +215,23 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.email_sent_at <= yesterday_end
     ).count()
     email_bounced = db.query(Lead).filter(
-        Lead.is_active == True,
-        or_(Lead.email_status == "bounced", Lead.email_bounced_at.isnot(None))
+        or_(Lead.email_status == "bounced", Lead.email_bounced_at.isnot(None), Lead.opted_out == True)
     ).count()
     email_blocked = db.query(Lead).filter(
-        Lead.is_active == True,
         or_(Lead.email_status == "blocked", Lead.email_blocked_at.isnot(None))
     ).count()
     email_delivered = db.query(Lead).filter(
-        Lead.is_active == True,
         Lead.email_sent_at.isnot(None),
-        Lead.email_status.notin_(["bounced", "blocked"])
+        or_(Lead.email_status.is_(None), Lead.email_status.notin_(["bounced", "blocked"]))
     ).count()
     email_opened = db.query(Lead).filter(
-        Lead.is_active == True,
         or_(Lead.email_status.in_(["opened", "clicked", "replied"]), Lead.email_opened_at.isnot(None))
     ).count()
     email_clicked = db.query(Lead).filter(
-        Lead.is_active == True,
         or_(Lead.email_status.in_(["clicked", "replied"]), Lead.email_clicked_at.isnot(None))
     ).count()
     email_replied = db.query(Lead).filter(
-        Lead.is_active == True, Lead.email_status == "replied"
+        Lead.email_status == "replied"
     ).count()
     email_pending = db.query(Lead).filter(
         Lead.is_active == True,
@@ -244,10 +239,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         Lead.email != "",
         Lead.email_sent_at.is_(None)
     ).count()
-    # Real bounce messages from DB (not hardcoded)
+    # Real bounce messages from DB (including inactive bounced leads)
     raw_bounce_messages = db.query(Lead).filter(
-        Lead.is_active == True,
-        Lead.email_bounced_at.isnot(None)
+        or_(Lead.email_status == "bounced", Lead.email_bounced_at.isnot(None))
     ).count()
 
     # ─── LinkedIn Stats ───────────────────────────────────────────────────────
