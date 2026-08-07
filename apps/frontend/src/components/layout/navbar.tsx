@@ -11,7 +11,6 @@ import { cn } from '@/lib/utils';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Leads', href: '/leads', icon: Users },
-  { name: 'Campaigns', href: '/campaigns', icon: BarChart3 },
   { name: 'Call Logs', href: '/calls', icon: Phone },
   { name: 'Appointments', href: '/appointments', icon: Calendar },
   { name: 'Lead Sourcing & LinkedIn', href: '/extraction', icon: MapPin },

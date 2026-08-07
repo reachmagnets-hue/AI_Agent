@@ -68,7 +68,15 @@ async function fetchCampaigns(): Promise<Campaign[]> {
   return response.json();
 }
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
 export default function CampaignsPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/');
+  }, [router]);
+  
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');

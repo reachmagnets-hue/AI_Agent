@@ -247,8 +247,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     # ─── LinkedIn Stats ───────────────────────────────────────────────────────
     linkedin_sent = db.query(Lead).filter(
         Lead.is_active == True,
-        or_(Lead.linkedin_sent_at.isnot(None),
-            Lead.linkedin_status.in_(["connection_sent", "connected", "message_sent", "meeting_scheduled"]))
+        Lead.linkedin_sent_at.isnot(None)
     ).count()
     linkedin_sent_today = db.query(Lead).filter(
         Lead.is_active == True,
@@ -261,15 +260,18 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     ).count()
     linkedin_connected = db.query(Lead).filter(
         Lead.is_active == True,
-        Lead.linkedin_status.in_(["connected", "message_sent", "meeting_scheduled"])
+        Lead.linkedin_sent_at.isnot(None),
+        Lead.linkedin_status == "connected"
     ).count()
     linkedin_messages_sent = db.query(Lead).filter(
         Lead.is_active == True,
-        Lead.linkedin_status.in_(["message_sent", "meeting_scheduled"])
+        Lead.linkedin_sent_at.isnot(None),
+        Lead.linkedin_status == "message_sent"
     ).count()
     linkedin_replied = db.query(Lead).filter(
         Lead.is_active == True,
-        Lead.linkedin_status == "meeting_scheduled"
+        Lead.linkedin_sent_at.isnot(None),
+        Lead.linkedin_status == "replied"
     ).count()
 
     # ─── Extraction & Directory Enrichment ───────────────────────────────────
