@@ -27,7 +27,15 @@ TARGET_LOCATIONS: List[str] = [
     "Oklahoma, USA", "Oregon, USA", "Pennsylvania, USA", "Rhode Island, USA", "South Carolina, USA",
     "South Dakota, USA", "Tennessee, USA", "Texas, USA", "Utah, USA", "Vermont, USA",
     "Virginia, USA", "Washington, USA", "West Virginia, USA", "Wisconsin, USA", "Wyoming, USA",
-    # --- 20 MAJOR METROPOLITAN AREAS ---
+    # --- CANADA PROVINCES & TERRITORIES & MAJOR CITIES ---
+    "Ontario, Canada", "Quebec, Canada", "British Columbia, Canada", "Alberta, Canada",
+    "Manitoba, Canada", "Saskatchewan, Canada", "Nova Scotia, Canada", "New Brunswick, Canada",
+    "Newfoundland and Labrador, Canada", "Prince Edward Island, Canada", "Northwest Territories, Canada",
+    "Yukon, Canada", "Nunavut, Canada",
+    "Toronto, Ontario, Canada", "Vancouver, British Columbia, Canada", "Montreal, Quebec, Canada",
+    "Calgary, Alberta, Canada", "Ottawa, Ontario, Canada", "Edmonton, Alberta, Canada",
+    "Quebec City, Quebec, Canada", "Winnipeg, Manitoba, Canada", "Hamilton, Ontario, Canada", "Halifax, Nova Scotia, Canada",
+    # --- 20 MAJOR METROPOLITAN AREAS & GLOBAL CITIES ---
     "Dallas-Fort Worth, Texas, USA",
     "Los Angeles, California, USA",
     "Houston, Texas, USA",
