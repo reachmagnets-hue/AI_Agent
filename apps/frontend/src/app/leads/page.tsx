@@ -667,20 +667,71 @@ export default function LeadsPage() {
       </div>
 
       {/* Subsections/Tabs */}
-      <div className="flex space-x-2 border-b border-muted-foreground/10 pb-2">
-        {(['all', 'phone', 'email', 'linkedin', 'social'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => { setLeadTab(tab); setPage(1); }}
-            className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 capitalize whitespace-nowrap ${
-              leadTab === tab 
-                ? 'bg-primary/10 text-primary border-primary' 
-                : 'text-muted-foreground hover:bg-muted/10 hover:text-foreground border-transparent'
-            }`}
-          >
-            {tab} Leads
-          </button>
-        ))}
+      <div className="flex space-x-2 border-b border-muted-foreground/10 pb-2 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => { setLeadTab('all'); setPage(1); }}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
+            leadTab === 'all'
+              ? 'bg-primary/10 text-primary border-primary'
+              : 'text-muted-foreground hover:bg-muted/10 hover:text-foreground border-transparent'
+          }`}
+        >
+          <span>🌐 All Leads</span>
+          <span className="px-2 py-0.5 rounded-full text-xs bg-primary/20">{total}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setLeadTab('email'); setPage(1); }}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
+            leadTab === 'email'
+              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500'
+              : 'text-muted-foreground hover:bg-muted/10 hover:text-foreground border-transparent'
+          }`}
+        >
+          <span>✉️ Email Leads</span>
+          {leadTab === 'email' && <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20">{total}</span>}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setLeadTab('phone'); setPage(1); }}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
+            leadTab === 'phone'
+              ? 'bg-sky-500/10 text-sky-600 border-sky-500'
+              : 'text-muted-foreground hover:bg-muted/10 hover:text-foreground border-transparent'
+          }`}
+        >
+          <span>📞 Phone Leads</span>
+          {leadTab === 'phone' && <span className="px-2 py-0.5 rounded-full text-xs bg-sky-500/20">{total}</span>}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setLeadTab('linkedin'); setPage(1); }}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
+            leadTab === 'linkedin'
+              ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500'
+              : 'text-muted-foreground hover:bg-muted/10 hover:text-foreground border-transparent'
+          }`}
+        >
+          <span>💼 LinkedIn Leads</span>
+          {leadTab === 'linkedin' && <span className="px-2 py-0.5 rounded-full text-xs bg-indigo-500/20">{total}</span>}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setLeadTab('social'); setPage(1); }}
+          className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
+            leadTab === 'social'
+              ? 'bg-purple-500/10 text-purple-600 border-purple-500'
+              : 'text-muted-foreground hover:bg-muted/10 hover:text-foreground border-transparent'
+          }`}
+        >
+          <span>📱 Social Leads</span>
+          {leadTab === 'social' && <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20">{total}</span>}
+        </button>
       </div>
 
       {/* Filter and Table Card */}
