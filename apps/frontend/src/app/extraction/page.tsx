@@ -90,22 +90,7 @@ export default function UnifiedLeadSourcingPage() {
 
   // Combined leads list (merging live extracted leads with DB leads)
   const displayLeads: ExtractedLead[] = React.useMemo(() => {
-    if (extractedLeads.length > 0 && selectedFolder === 'all') {
-      return extractedLeads.filter(l => {
-        if (leadFilter === 'email' && !l.email) return false;
-        if (leadFilter === 'phone' && !l.phone) return false;
-        if (leadFilter === 'website' && !l.website) return false;
-        if (leadFilter === 'social' && !(l.facebook_url || l.instagram_url || l.linkedin_url || l.twitter_url || l.youtube_url)) return false;
-        if (folderSearch) {
-          const s = folderSearch.toLowerCase();
-          return (l.name?.toLowerCase().includes(s) || l.phone?.includes(s) || l.email?.toLowerCase().includes(s) || l.address?.toLowerCase().includes(s));
-        }
-        return true;
-      });
-    }
-
-    if (!dbLeadsData?.leads) return [];
-    return dbLeadsData.leads.map((l: any) => ({
+    const dbMapped: ExtractedLead[] = dbLeadsData?.leads ? dbLeadsData.leads.map((l: any) => ({
       name: l.business_name || l.full_name || 'Unnamed Business',
       phone: l.phone,
       website: l.website,
@@ -119,8 +104,34 @@ export default function UnifiedLeadSourcingPage() {
       rating: l.rating,
       description: l.description,
       directories: {}
-    }));
-  }, [extractedLeads, dbLeadsData, selectedFolder, leadFilter, folderSearch]);
+    })) : [];
+
+    // Combine live extracted leads + DB leads cleanly, avoiding duplicates
+    const combined = [...extractedLeads];
+    for (const d of dbMapped) {
+      if (!combined.some(c => c.name === d.name || (c.phone && c.phone === d.phone) || (c.email && c.email === d.email))) {
+        combined.push(d);
+      }
+    }
+
+    // Filter combined list by Quick Filter chips & Search Query
+    return combined.filter(l => {
+      if (leadFilter === 'email' && !l.email) return false;
+      if (leadFilter === 'phone' && !l.phone) return false;
+      if (leadFilter === 'website' && !l.website) return false;
+      if (leadFilter === 'social' && !(l.facebook_url || l.instagram_url || l.linkedin_url || l.twitter_url || l.youtube_url)) return false;
+      if (folderSearch) {
+        const s = folderSearch.toLowerCase();
+        return (
+          l.name?.toLowerCase().includes(s) ||
+          l.phone?.includes(s) ||
+          l.email?.toLowerCase().includes(s) ||
+          l.address?.toLowerCase().includes(s)
+        );
+      }
+      return true;
+    });
+  }, [extractedLeads, dbLeadsData, leadFilter, folderSearch]);
 
   // SECTION 2: LinkedIn Prospecting Form States
   const [linkedinIndustry, setLinkedinIndustry] = useState<string>('Auto Body Shop');
