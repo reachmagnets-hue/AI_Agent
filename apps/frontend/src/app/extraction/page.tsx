@@ -363,33 +363,24 @@ export default function UnifiedLeadSourcingPage() {
           <div className="lg:col-span-1 space-y-4">
             <Card className="glass-card shadow-md border border-slate-200/80">
               <CardHeader className="border-b border-slate-100 pb-3">
-                <CardTitle className="text-base font-bold text-slate-800">Extraction Controls</CardTitle>
-                <CardDescription className="text-xs">Specify target industry, location, and limit for automated extraction.</CardDescription>
+                <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-indigo-600" /> Automated Lead Extraction Controls
+                </CardTitle>
+                <CardDescription className="text-xs">Enter target industry keyword. Scraper will automatically extract across ALL places & store into assigned Industry Folder.</CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
                 <form onSubmit={handleStartGmapsExtraction} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Industry / Keyword Instruction</label>
+                    <label className="text-xs font-bold text-slate-700">Industry / Niche Keyword Instruction</label>
                     <Input
                       value={gmapsIndustry}
                       onChange={(e) => setGmapsIndustry(e.target.value)}
-                      placeholder="e.g. automotive, roofers, dentist"
+                      placeholder="e.g. Auto Body Care, Dentist, Roofing, HVAC"
                       required
                       disabled={isExtracting}
-                      className="bg-white/90 border-slate-200 text-xs"
+                      className="bg-white/90 border-slate-200 text-xs font-semibold"
                     />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Target Location / City / State</label>
-                    <Input
-                      value={gmapsLocation}
-                      onChange={(e) => setGmapsLocation(e.target.value)}
-                      placeholder="e.g. USA, New York, CA, Texas"
-                      required
-                      disabled={isExtracting}
-                      className="bg-white/90 border-slate-200 text-xs"
-                    />
+                    <p className="text-[11px] text-slate-500 font-medium">Leads will be extracted across ALL global locations & saved into Industry Folder: <span className="font-bold text-indigo-600">📁 {gmapsIndustry || 'Auto Body Care'}</span></p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -400,12 +391,11 @@ export default function UnifiedLeadSourcingPage() {
                       disabled={isExtracting}
                       className="w-full bg-white/90 border border-slate-200 rounded-md p-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <option value="20">20 leads</option>
-                      <option value="50">50 leads</option>
-                      <option value="100">100 leads</option>
-                      <option value="250">250 leads</option>
-                      <option value="500">500 leads</option>
-                      <option value="0">⚡ Unlimited (All 70 Target Locations)</option>
+                      <option value="50">50 leads per run</option>
+                      <option value="100">100 leads per run</option>
+                      <option value="250">250 leads per run</option>
+                      <option value="500">500 leads per run</option>
+                      <option value="0">⚡ Unlimited Continuous (All Locations)</option>
                     </select>
                   </div>
 
@@ -415,7 +405,7 @@ export default function UnifiedLeadSourcingPage() {
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-10 text-xs flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     {isExtracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
-                    <span>Start Extraction</span>
+                    <span>Start Extraction Across All Places</span>
                   </Button>
                 </form>
               </CardContent>
@@ -439,11 +429,16 @@ export default function UnifiedLeadSourcingPage() {
               <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-3">
                 <div className="flex justify-between items-center">
                   <div>
-                    <CardTitle className="text-base font-bold text-slate-800">Extracted Listings & Social Media Details</CardTitle>
-                    <CardDescription className="text-xs">Real-time stream of extracted businesses with contact info, social links & directories</CardDescription>
+                    <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                      <span>Extracted Listings</span>
+                      <span className="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-lg text-xs font-extrabold border border-indigo-200">
+                        📁 Folder: {gmapsIndustry || 'Auto Body Care'}
+                      </span>
+                    </CardTitle>
+                    <CardDescription className="text-xs">Real-time extracted leads grouped into Industry Folder with phones, emails, socials & directory links (Yelp, BBB, YellowPages)</CardDescription>
                   </div>
-                  <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold">
-                    {extractedLeads.length} listings
+                  <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-extrabold shadow-sm">
+                    {extractedLeads.length} listings extracted
                   </span>
                 </div>
               </CardHeader>
