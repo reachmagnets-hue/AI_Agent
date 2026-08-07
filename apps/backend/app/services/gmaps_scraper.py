@@ -289,8 +289,8 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
             db.refresh(campaign)
         campaign_id = campaign.id
 
-        # Pre-populate deduplication sets from existing DB leads
-        existing_leads = db.query(Lead).filter(Lead.campaign_id == campaign_id).all()
+        # Pre-populate deduplication sets from ALL existing DB leads
+        existing_leads = db.query(Lead).all()
         for el in existing_leads:
             if el.business_name:
                 seen_names.add(re.sub(r'\W+', '', str(el.business_name).lower()))
@@ -305,7 +305,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
         
     # Determine target locations list
     from app.core.scheduler import TARGET_LOCATIONS
-    if location.upper() in ["USA", "ALL"] or limit <= 0:
+    if location.upper() in ["USA", "ALL", "ALL PLACES", "ALL PLACES (GLOBAL)"] or limit <= 0:
         locations_to_scrape = TARGET_LOCATIONS
     else:
         locations_to_scrape = [location]
@@ -360,7 +360,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                 new_card_found = False
                 
                 for card in cards:
-                    if extracted_count >= limit:
+                    if extracted_count >= max_limit:
                         break
                         
                     try:
