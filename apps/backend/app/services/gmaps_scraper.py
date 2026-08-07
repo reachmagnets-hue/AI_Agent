@@ -9,8 +9,7 @@ from app.models.lead import Lead
 from uuid import uuid4
 import structlog
 
-logger = structlog.get_logger(__name__)
-
+from app.utils.industry_normalizer import normalize_industry_name
 from typing import Dict, Any, Optional, List, Set
 
 EMAIL_REGEX = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b')
@@ -546,7 +545,7 @@ async def scrape_gmaps(industry: str, location: str, limit: int = 10, update_cal
                                 youtube_url=lead_data["youtube_url"],
                                 rating=lead_data["rating"],
                                 description=lead_data["description"],
-                                business_type=industry,
+                                business_type=normalize_industry_name(industry),
                                 campaign_id=target_campaign_id,
                                 source="google_maps_scrape",
                                 status="pending",

@@ -23,14 +23,20 @@ from fastapi.responses import StreamingResponse
 
 @router.get("/industries")
 def get_lead_industries(db: Session = Depends(get_db)):
-    """Retrieve distinct active industries (business_types) from leads table"""
+    """Retrieve distinct active canonical industries (business_types) from leads table"""
+    from app.utils.industry_normalizer import normalize_industry_name
     results = db.query(Lead.business_type).filter(
         Lead.business_type.isnot(None),
         Lead.business_type != "",
         Lead.is_active == True
     ).distinct().all()
-    industries = sorted([r[0] for r in results if r[0]])
-    return {"industries": industries}
+    
+    canonical_set = set()
+    for r in results:
+        if r[0]:
+            canonical_set.add(normalize_industry_name(r[0]))
+            
+    return {"industries": sorted(list(canonical_set))}
 
 @router.get("/export/csv")
 def export_leads_csv(
@@ -386,8 +392,22 @@ def get_leads(
                 query = query.filter(Lead.campaign_id == camp_uuid)
             except ValueError:
                 pass
-    if business_type:
-        query = query.filter(Lead.business_type == business_type)
+    if business_type and business_type.lower() != "all":
+        bt_low = business_type.lower()
+        if "body" in bt_low or "bdy" in bt_low:
+            query = query.filter(or_(Lead.business_type.ilike("%body%"), Lead.business_type.ilike("%bdy%")))
+        elif "repair" in bt_low or "mechanic" in bt_low:
+            query = query.filter(or_(Lead.business_type.ilike("%repair%"), Lead.business_type.ilike("%mechanic%")))
+        elif "detail" in bt_low:
+            query = query.filter(Lead.business_type.ilike("%detail%"))
+        elif "tire" in bt_low:
+            query = query.filter(Lead.business_type.ilike("%tire%"))
+        elif "roof" in bt_low:
+            query = query.filter(Lead.business_type.ilike("%roof%"))
+        elif "dentist" in bt_low or "dental" in bt_low:
+            query = query.filter(or_(Lead.business_type.ilike("%dentist%"), Lead.business_type.ilike("%dental%")))
+        else:
+            query = query.filter(Lead.business_type.ilike(f"%{business_type}%"))
     if priority:
         query = query.filter(Lead.priority == priority)
         
