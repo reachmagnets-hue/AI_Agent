@@ -168,18 +168,34 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 # Pull next pending lead (excluding bounced leads)
                 from sqlalchemy import or_ as sa_or_
                 if is_email:
+                    # 1. First priority: Fresh leads needing Initial Email (Step 1 - Monday)
                     lead = db.query(Lead).filter(
                         Lead.email_sent_at.is_(None),
                         Lead.email.isnot(None),
                         Lead.email != "",
                         sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
                         sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
+                        sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
                         sa_or_(
                             Lead.email_status.is_(None),
-                            Lead.email_status != "bounced"
+                            Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])
                         ),
                         Lead.email_bounced_at.is_(None)
                     ).order_by(Lead.created_at).first()
+
+                    # 2. Second priority: Follow-Up #1 (Step 2 - Wednesday: 48h after Step 1)
+                    if not lead:
+                        two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
+                        lead = db.query(Lead).filter(
+                            Lead.email_sent_at <= two_days_ago,
+                            Lead.email.isnot(None),
+                            Lead.email != "",
+                            sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                            sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
+                            sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                            Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"]),
+                            Lead.email_bounced_at.is_(None)
+                        ).order_by(Lead.email_sent_at).first()
                 else:
                     lead = db.query(Lead).filter(
                         uuid_match(Lead.campaign_id, campaign_id),
