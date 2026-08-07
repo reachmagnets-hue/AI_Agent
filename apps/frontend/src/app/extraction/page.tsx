@@ -80,10 +80,13 @@ export default function UnifiedLeadSourcingPage() {
       if (leadFilter === 'phone') params.append('has_phone', 'true');
       if (leadFilter === 'social') params.append('has_social', 'true');
       if (folderSearch) params.append('search', folderSearch);
-      params.append('limit', '200');
+      params.append('limit', '500');
 
       const res = await fetch(`/api/v1/leads/?${params.toString()}`);
-      if (!res.ok) throw new Error('Failed fetching leads');
+      if (!res.ok) {
+        console.error('Failed fetching DB leads:', res.status);
+        return { leads: [], total: 0 };
+      }
       return res.json();
     }
   });

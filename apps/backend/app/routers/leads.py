@@ -377,7 +377,7 @@ def get_leads(
     has_email: Optional[bool] = Query(None),
     has_phone: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
-    limit: int = Query(25, ge=1, le=100),
+    limit: int = Query(25, ge=1, le=1000),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
     db: Session = Depends(get_db)
