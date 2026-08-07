@@ -8,6 +8,7 @@ from app.models.campaign import Campaign
 from app.models.lead import Lead
 from uuid import uuid4
 import structlog
+logger = structlog.get_logger(__name__)
 
 from app.utils.industry_normalizer import normalize_industry_name
 from typing import Dict, Any, Optional, List, Set
