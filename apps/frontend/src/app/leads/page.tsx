@@ -9,12 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Users, Search, Plus, Filter, Upload, AlertCircle, Eye, Star, Sparkles, X, Loader2, FileImage, Download } from 'lucide-react';
 
-async function fetchLeads({ search, status, priority, businessType, page, leadTab }: { search: string; status: string; priority: string; businessType: string; page: number; leadTab: string }) {
+async function fetchLeads({ search, status, priority, businessType, leadSource, page, leadTab }: { search: string; status: string; priority: string; businessType: string; leadSource: string; page: number; leadTab: string }) {
   let url = `/api/v1/leads/?page=${page}&limit=15`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
   if (status && status !== 'all') url += `&status=${status}`;
   if (priority && priority !== 'all') url += `&priority=${priority}`;
   if (businessType && businessType !== 'all') url += `&business_type=${encodeURIComponent(businessType)}`;
+  if (leadSource && leadSource !== 'all') url += `&source=${encodeURIComponent(leadSource)}`;
   
   if (leadTab === 'email') {
     url += '&has_email=true';
@@ -52,6 +53,7 @@ export default function LeadsPage() {
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
   const [businessType, setBusinessType] = useState('all');
+  const [leadSource, setLeadSource] = useState('all');
   const [leadTab, setLeadTab] = useState<'all' | 'phone' | 'email' | 'linkedin' | 'social'>('all');
   const [page, setPage] = useState(1);
   const [file, setFile] = useState<File | null>(null);
@@ -214,8 +216,8 @@ export default function LeadsPage() {
   };
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['leads', { search, status, priority, businessType, page, leadTab }],
-    queryFn: () => fetchLeads({ search, status, priority, businessType, page, leadTab }),
+    queryKey: ['leads', { search, status, priority, businessType, leadSource, page, leadTab }],
+    queryFn: () => fetchLeads({ search, status, priority, businessType, leadSource, page, leadTab }),
   });
 
   const importMutation = useMutation({
@@ -545,6 +547,80 @@ export default function LeadsPage() {
             <p className="text-xs text-muted-foreground mt-1">Total System Leads</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Lead Source Category Selector */}
+      <div className="bg-card/40 backdrop-blur-md p-4 rounded-2xl border border-muted-foreground/10 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
+            <Filter className="h-4 w-4 text-primary" /> Separate Leads by Extraction Source
+          </h3>
+          <span className="text-xs font-semibold text-muted-foreground">
+            Filter by Google Maps, AI Screenshots, CSVs, or LinkedIn
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => { setLeadSource('all'); setPage(1); }}
+            className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
+              leadSource === 'all'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-muted-foreground border-muted-foreground/15 hover:bg-accent'
+            }`}
+          >
+            🌐 All System Leads
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setLeadSource('gmaps'); setPage(1); }}
+            className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
+              leadSource === 'gmaps'
+                ? 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-500/20'
+                : 'bg-indigo-50/50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+            }`}
+          >
+            📍 Google Maps Extracted
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setLeadSource('screenshot'); setPage(1); }}
+            className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
+              leadSource === 'screenshot'
+                ? 'bg-purple-600 text-white border-purple-600 ring-2 ring-purple-500/20'
+                : 'bg-purple-50/50 text-purple-700 border-purple-200 hover:bg-purple-100'
+            }`}
+          >
+            📸 AI Screenshot Extracted
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setLeadSource('csv'); setPage(1); }}
+            className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
+              leadSource === 'csv'
+                ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/20'
+                : 'bg-emerald-50/50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+            }`}
+          >
+            📄 CSV Imported
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setLeadSource('linkedin'); setPage(1); }}
+            className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 shadow-sm ${
+              leadSource === 'linkedin'
+                ? 'bg-sky-600 text-white border-sky-600 ring-2 ring-sky-500/20'
+                : 'bg-sky-50/50 text-sky-700 border-sky-200 hover:bg-sky-100'
+            }`}
+          >
+            💼 LinkedIn Prospecting
+          </button>
+        </div>
       </div>
 
       {/* Industry Folders Hub */}

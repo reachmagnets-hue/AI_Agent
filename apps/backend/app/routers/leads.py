@@ -350,6 +350,7 @@ def get_leads(
     status: Optional[str] = Query(None),
     campaign_id: Optional[str] = Query(None),
     business_type: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
     priority: Optional[str] = Query(None),
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
@@ -410,6 +411,19 @@ def get_leads(
             query = query.filter(Lead.business_type.ilike(f"%{business_type}%"))
     if priority:
         query = query.filter(Lead.priority == priority)
+        
+    if source and source.lower() != "all":
+        s_low = source.lower()
+        if s_low in ["gmaps", "google_maps", "google_maps_scrape"]:
+            query = query.filter(Lead.source == "google_maps_scrape")
+        elif s_low in ["screenshot", "screenshot_extract", "ocr"]:
+            query = query.filter(or_(Lead.source == "screenshot_extract", Lead.source == "screenshot_ocr", Lead.internal_notes.ilike("%screenshot%")))
+        elif s_low in ["csv", "csv_import", "csv_upload"]:
+            query = query.filter(or_(Lead.source == "csv_import", Lead.source == "csv_upload", Lead.source.ilike("%.csv%")))
+        elif s_low in ["linkedin", "linkedin_prospect", "linkedin_autopilot"]:
+            query = query.filter(or_(Lead.source == "linkedin_autopilot", Lead.source == "linkedin_scrape", Lead.source == "linkedin_prospect"))
+        else:
+            query = query.filter(Lead.source == source)
         
     if date_from:
         query = query.filter(Lead.created_at >= datetime.combine(date_from, datetime.min.time()))
