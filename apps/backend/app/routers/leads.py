@@ -408,21 +408,7 @@ def get_leads(
             except ValueError:
                 pass
     if business_type and business_type.lower() != "all":
-        bt_low = business_type.lower()
-        if "body" in bt_low or "bdy" in bt_low:
-            query = query.filter(or_(Lead.business_type.ilike("%body%"), Lead.business_type.ilike("%bdy%")))
-        elif "repair" in bt_low or "mechanic" in bt_low:
-            query = query.filter(or_(Lead.business_type.ilike("%repair%"), Lead.business_type.ilike("%mechanic%")))
-        elif "detail" in bt_low:
-            query = query.filter(Lead.business_type.ilike("%detail%"))
-        elif "tire" in bt_low:
-            query = query.filter(Lead.business_type.ilike("%tire%"))
-        elif "roof" in bt_low:
-            query = query.filter(Lead.business_type.ilike("%roof%"))
-        elif "dentist" in bt_low or "dental" in bt_low:
-            query = query.filter(or_(Lead.business_type.ilike("%dentist%"), Lead.business_type.ilike("%dental%")))
-        else:
-            query = query.filter(Lead.business_type.ilike(f"%{business_type}%"))
+        query = query.filter(Lead.business_type == "Auto Body Shop")
     if priority:
         query = query.filter(Lead.priority == priority)
         
