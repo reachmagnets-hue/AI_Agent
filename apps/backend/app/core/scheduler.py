@@ -58,8 +58,8 @@ TARGET_LOCATIONS: List[str] = [
     "Sydney, New South Wales, Australia"
 ]
 
-MAX_LEADS_PER_EXTRACTION = 500
-MAX_NIGHTLY_EMAILS = 450
+MAX_LEADS_PER_EXTRACTION = 1000
+MAX_DAILY_EMAILS = 500
 EMAIL_STAGGER_DELAY_SECONDS = 45
 
 class MasterAutonomousScheduler:
@@ -68,16 +68,17 @@ class MasterAutonomousScheduler:
     
     Workflow & Rules:
     1. 70 Target Locations (50 US States + 20 Metros) with continuous loop rotation.
-    2. Extraction (06:00 AM - 06:00 PM): 1-hr ON / 1-hr REST alternating pattern (Hours 6, 8, 10, 12, 14, 16).
-       - Max 50 leads per location.
+    2. High-speed Google Maps Extraction (Continuous 24/7, No Limits):
+       - Fast extraction across targeted locations for "Auto Body Shop", "Auto Repair", "Car Detailing", "Auto Mechanic", "Auto Body Care".
        - Full deduplication (place_id, email, phone).
        - Captures business name, phone, email, address, website, & directory profiles (Yelp, BBB, Socials).
-    3. Weekend Break: Saturday & Sunday are holidays (No extraction, emails, or calls).
-    4. Email Outreach (06:00 PM - 06:00 AM): 45s stagger delay, max 450 emails/night limit.
-       - Excludes bounced emails from sending queue, while keeping bounce metrics in database.
-    5. Retell AI Calls (08:00 PM - 04:00 AM): Outbound AI voice calling with business metadata.
-    6. Daily Disk Cleanup (03:00 AM): Purges temp files, old screenshots, and logs over 24h old to save VPS disk space.
-    7. 30-Minute IMAP Sync: Parses bounce DSN reports and lead replies.
+       - Automatically maps and stores all extracted leads into the canonical "Auto Body Shop" folder.
+    3. Continuous 365-Day Email Outreach (No Weekend Holiday, No Time Restriction):
+       - 500 emails/day cap, 45s stagger delay between dispatches.
+       - Precision 3-Step Follow-Up Sequence (Step 1 Initial -> Step 2 48h Followup #1 -> Step 3 48h Followup #2).
+       - Excludes bounced, blocked, replied, and clicked leads automatically.
+    4. Daily Disk Cleanup (03:00 AM): Purges temp files, old screenshots, and logs over 24h old to save VPS disk space.
+    5. 30-Minute IMAP Sync: Parses bounce DSN reports and lead replies.
     """
     def __init__(self):
         self._task = None
@@ -86,16 +87,16 @@ class MasterAutonomousScheduler:
         self.last_extraction_hour = -1
         self.last_imap_sync_minute = -1
         self.last_cleanup_day = -1
-        self.nightly_emails_sent = 0
-        self.current_night_date = ""
+        self.daily_emails_sent = 0
+        self.current_daily_date = ""
 
     def record_email_sent(self):
-        """Increments nightly email counter"""
-        self.nightly_emails_sent += 1
+        """Increments daily email counter"""
+        self.daily_emails_sent += 1
 
     async def _scheduler_loop(self):
         from app.core.config import get_settings
-        logger.info("🚀 World-Class Master Autonomous Scheduler Initialized")
+        logger.info("🚀 World-Class Master Autonomous Scheduler Initialized (24/7 365-Day Mode)")
         minutes_elapsed = 0
 
         while self._is_running:
@@ -113,53 +114,39 @@ class MasterAutonomousScheduler:
             current_minute = now_local.minute
             today_str = now_local.strftime("%Y-%m-%d")
 
-            # Reset nightly email count at 18:00 PM (6 PM IST)
-            night_key = f"{today_str}_18"
-            if current_hour == 18 and self.current_night_date != night_key:
-                self.nightly_emails_sent = 0
-                self.current_night_date = night_key
-                logger.info("🌙 Resetting nightly email counter to 0 for 6 PM - 6 AM IST window.")
+            # Reset daily email counter at midnight (00:00 IST)
+            if self.current_daily_date != today_str:
+                self.daily_emails_sent = 0
+                self.current_daily_date = today_str
+                logger.info(f"🌅 Resetting daily email counter to 0 for date {today_str} IST.")
 
             # ---------------------------------------------------------------
-            # 🏖️ WEEKEND BREAK (Saturday & Sunday Holiday)
+            # 🔍 1. CONTINUOUS EXTRACTION (No time limit, 365 days a year)
             # ---------------------------------------------------------------
-            if current_weekday >= 5:
-                if minutes_elapsed % 60 == 0:
-                    logger.info("🏖️ Weekend Break / Holiday (Saturday/Sunday). All automated campaigns on standby until Monday 06:00 AM.")
-                minutes_elapsed += 1
-                await asyncio.sleep(60)
-                continue
+            if current_hour != self.last_extraction_hour:
+                self.last_extraction_hour = current_hour
+                logger.info("⏰ Triggering continuous multi-location extraction...", hour=current_hour, target_per_run=MAX_LEADS_PER_EXTRACTION)
+                asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
 
             # ---------------------------------------------------------------
-            # 🔍 1. EXTRACTION WINDOW: 06:00 AM - 06:00 PM (1-hr ON / 1-hr REST)
+            # 📧 2. 24/7 EMAIL OUTREACH (500 emails/day, 45s delay, 365 days)
             # ---------------------------------------------------------------
-            if 6 <= current_hour < 18:
-                if current_hour % 2 == 0:
-                    if current_hour != self.last_extraction_hour:
-                        self.last_extraction_hour = current_hour
-                        logger.info("⏰ Extraction Window Active (06:00 AM - 06:00 PM IST). Triggering multi-location extraction...", hour=current_hour, target_per_run=MAX_LEADS_PER_EXTRACTION)
-                        asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
+            if self.daily_emails_sent < MAX_DAILY_EMAILS:
+                logger.info("📧 Running 24/7 3-Step Email Campaign Worker...", hour=current_hour, sent_today=self.daily_emails_sent, max_cap=MAX_DAILY_EMAILS)
+                try:
+                    await run_active_campaigns()
+                except Exception as e:
+                    logger.error("Error in email campaign outreach worker", error=str(e))
+            else:
+                if minutes_elapsed % 30 == 0:
+                    logger.info(f"🛑 Daily email limit reached ({self.daily_emails_sent}/{MAX_DAILY_EMAILS}). Resuming at 00:00 midnight IST.")
 
             # ---------------------------------------------------------------
-            # 📧 2. EMAIL OUTREACH WINDOW: 06:00 PM - 06:00 AM (Max 450/night, 45s delay)
-            # ---------------------------------------------------------------
-            if current_hour >= 18 or current_hour < 6:
-                if self.nightly_emails_sent < MAX_NIGHTLY_EMAILS:
-                    logger.info("📧 Email Outreach Window Active (6 PM - 6 AM IST). Running email campaign worker...", hour=current_hour, sent_tonight=self.nightly_emails_sent, max_cap=MAX_NIGHTLY_EMAILS)
-                    try:
-                        await run_active_campaigns()
-                    except Exception as e:
-                        logger.error("Error in email campaign outreach worker", error=str(e))
-                else:
-                    if minutes_elapsed % 30 == 0:
-                        logger.info(f"🛑 Nightly email limit reached ({self.nightly_emails_sent}/{MAX_NIGHTLY_EMAILS}). Pausing emails until 6 PM tomorrow.")
-
-            # ---------------------------------------------------------------
-            # 📞 3. VOICE CALLING WINDOWS: 8 PM-10 PM IST, 12 AM-1 AM IST, 3 AM-4 AM IST
+            # 📞 3. VOICE CALLING WINDOWS
             # ---------------------------------------------------------------
             is_call_window = (20 <= current_hour < 22) or (0 <= current_hour < 1) or (3 <= current_hour < 4)
             if is_call_window:
-                logger.info("📞 Voice Calling Window Active (Designated Call Windows). Triggering active voice campaigns...", hour=current_hour)
+                logger.info("📞 Voice Calling Window Active. Triggering active voice campaigns...", hour=current_hour)
                 try:
                     await run_active_campaigns()
                 except Exception as e:
@@ -207,10 +194,8 @@ class MasterAutonomousScheduler:
     async def run_scheduled_extraction(self, target_limit: int = MAX_LEADS_PER_EXTRACTION):
         """
         Background worker to extract leads across target locations until target_limit is reached.
-        If a location has fewer leads, it automatically shifts to the next location or alternate query keywords
-        until the target lead limit for this active hour is completely fulfilled.
         """
-        queries = ["Auto Body Shop", "Auto Repair", "Car Detailing", "Auto Mechanic", "Tire Shop"]
+        queries = ["Auto Body Shop", "Auto Repair", "Car Detailing", "Auto Mechanic", "Auto Body Care"]
         extracted_this_run = 0
 
         while extracted_this_run < target_limit and self._is_running:
@@ -234,7 +219,7 @@ class MasterAutonomousScheduler:
                 logger.error(f"Failed extraction attempt for {location}", error=str(e))
                 await asyncio.sleep(2)
 
-        logger.info(f"🎯 Extraction run completed! Extracted {extracted_this_run} total new leads this active hour.")
+        logger.info(f"🎯 Extraction run completed! Extracted {extracted_this_run} total new leads.")
 
     def perform_vps_disk_cleanup(self):
         """Purges old temp files, Playwright screenshots, and log artifacts over 24h old to save VPS disk space"""
@@ -242,7 +227,6 @@ class MasterAutonomousScheduler:
         deleted_files = 0
         cutoff_seconds = 86400  # 24 hours
 
-        # Clean temp directory screenshot artifacts
         target_patterns = [
             "/tmp/*.png", "/tmp/*.webp", "/tmp/*.jpeg",
             "/home/chetan-patil/.gemini/antigravity-ide/brain/*/*.png",
@@ -263,8 +247,8 @@ class MasterAutonomousScheduler:
         logger.info(f"🧹 VPS Disk Cleanup Complete! Purged {deleted_files} old temporary files/artifacts.")
 
     def record_email_sent(self):
-        """Increments the nightly sent emails counter"""
-        self.nightly_emails_sent += 1
+        """Increments daily sent emails counter"""
+        self.daily_emails_sent += 1
 
     def get_status(self) -> Dict[str, Any]:
         """Returns current scheduler operational metrics"""
@@ -273,20 +257,19 @@ class MasterAutonomousScheduler:
         now_local = datetime.now(timezone.utc).astimezone(ist_tz)
         current_hour = now_local.hour
         current_weekday = now_local.weekday()
-        is_weekend = current_weekday >= 5
         return {
             "is_running": self._is_running,
-            "is_weekend_holiday": is_weekend,
+            "is_weekend_holiday": False,
             "current_hour": current_hour,
             "total_target_locations": len(TARGET_LOCATIONS),
             "location_index": self.location_index,
             "current_location": TARGET_LOCATIONS[self.location_index % len(TARGET_LOCATIONS)],
             "next_location": TARGET_LOCATIONS[(self.location_index + 1) % len(TARGET_LOCATIONS)],
-            "extraction_active": (6 <= current_hour < 18) and (current_hour % 2 == 0) and not is_weekend,
-            "email_outreach_active": (current_hour >= 18 or current_hour < 6) and not is_weekend,
-            "voice_calling_active": (current_hour >= 20 or current_hour < 4) and not is_weekend,
-            "nightly_emails_sent": self.nightly_emails_sent,
-            "max_nightly_emails": MAX_NIGHTLY_EMAILS,
+            "extraction_active": True,
+            "email_outreach_active": True,
+            "voice_calling_active": (20 <= current_hour < 22) or (0 <= current_hour < 1) or (3 <= current_hour < 4),
+            "daily_emails_sent": self.daily_emails_sent,
+            "max_daily_emails": MAX_DAILY_EMAILS,
             "email_stagger_delay_seconds": EMAIL_STAGGER_DELAY_SECONDS
         }
 

@@ -165,37 +165,63 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                     db.commit()
                     break
                     
-                # Pull next pending lead (excluding bounced leads)
+                # Pull next pending lead (excluding bounced/replied/clicked leads)
                 from sqlalchemy import or_ as sa_or_
+                current_step = 1
                 if is_email:
-                    # 1. First priority: Fresh leads needing Initial Email (Step 1 - Monday)
+                    two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
+                    
+                    # 1. Step 3 (Follow-Up #2): Sent 48h after Step 2
                     lead = db.query(Lead).filter(
-                        Lead.email_sent_at.is_(None),
+                        Lead.email_sent_at <= two_days_ago,
                         Lead.email.isnot(None),
                         Lead.email != "",
+                        Lead.internal_notes.like("%[Email Step 2]%"),
+                        ~Lead.internal_notes.like("%[Email Step 3]%"),
                         sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
                         sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
                         sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
-                        sa_or_(
-                            Lead.email_status.is_(None),
-                            Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])
-                        ),
+                        Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"]),
                         Lead.email_bounced_at.is_(None)
-                    ).order_by(Lead.created_at).first()
+                    ).order_by(Lead.email_sent_at).first()
+                    if lead:
+                        current_step = 3
 
-                    # 2. Second priority: Follow-Up #1 (Step 2 - Wednesday: 48h after Step 1)
+                    # 2. Step 2 (Follow-Up #1): Sent 48h after Step 1
                     if not lead:
-                        two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
                         lead = db.query(Lead).filter(
                             Lead.email_sent_at <= two_days_ago,
                             Lead.email.isnot(None),
                             Lead.email != "",
+                            sa_or_(Lead.internal_notes.like("%[Email Step 1]%"), Lead.email_sent_at.isnot(None)),
+                            ~Lead.internal_notes.like("%[Email Step 2]%"),
+                            ~Lead.internal_notes.like("%[Email Step 3]%"),
                             sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
                             sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
                             sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
                             Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"]),
                             Lead.email_bounced_at.is_(None)
                         ).order_by(Lead.email_sent_at).first()
+                        if lead:
+                            current_step = 2
+
+                    # 3. Step 1 (Initial Email - Fresh Leads)
+                    if not lead:
+                        lead = db.query(Lead).filter(
+                            Lead.email_sent_at.is_(None),
+                            Lead.email.isnot(None),
+                            Lead.email != "",
+                            sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                            sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
+                            sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                            sa_or_(
+                                Lead.email_status.is_(None),
+                                Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])
+                            ),
+                            Lead.email_bounced_at.is_(None)
+                        ).order_by(Lead.created_at).first()
+                        if lead:
+                            current_step = 1
                 else:
                     lead = db.query(Lead).filter(
                         uuid_match(Lead.campaign_id, campaign_id),
@@ -225,7 +251,7 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 db.close()
 
             if is_email:
-                logger.info("Processing email campaign lead", campaign_id=str(campaign_id), lead_id=str(lead_id))
+                logger.info("Processing email campaign lead", campaign_id=str(campaign_id), lead_id=str(lead_id), step=current_step)
                 db_update = SessionLocal()
                 try:
                     db_item = db_update.query(Lead).filter(uuid_match(Lead.id, lead_id)).first()
@@ -240,7 +266,8 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                                 to_name=str(db_item.full_name) if db_item.full_name else "there",
                                 business_name=str(db_item.business_name) if db_item.business_name else None,
                                 business_type=str(db_item.business_type) if db_item.business_type else None,
-                                lead_id=str(db_item.id)
+                                lead_id=str(db_item.id),
+                                step=current_step
                             )
                             
                             db_update.expire_all()
@@ -254,6 +281,11 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                                         db_item.email_delivered_at = now_utc  # type: ignore
                                     if db_item.email_status not in ["opened", "clicked", "replied", "bounced", "blocked"]:
                                         db_item.email_status = "delivered"  # type: ignore
+                                    
+                                    notes = str(db_item.internal_notes or "")
+                                    step_tag = f"[Email Step {current_step}]"
+                                    if step_tag not in notes:
+                                        db_item.internal_notes = f"{notes} {step_tag}".strip()
                                 db_update.commit()
                             
                             try:

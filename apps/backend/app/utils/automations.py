@@ -252,9 +252,9 @@ async def send_whatsapp_message(to_phone: str, to_name: str, message_text: str) 
         return False
 
 
-def render_outreach_email(to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None) -> tuple[str, str]:
+def render_outreach_email(to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None, step: int = 1) -> tuple[str, str]:
     """
-    Render outreach email body and subject based on the lead's niche (business_type).
+    Render outreach email body and subject based on the lead's niche (business_type) and sequence step (1, 2, or 3).
     Returns (subject, html_content).
     """
     settings = get_settings()
@@ -265,42 +265,36 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
         booking_url = "https://calendar.google.com"
     
     biz_name_str = business_name.strip() if business_name else ""
-    
-    # Niche classification
-    is_automotive = False
-    if business_type:
-        bt_lower = business_type.lower()
-        auto_keywords = ["automotive", "car", "dealer", "repair", "auto", "mechanic", "tire", "garage", "collision", "service center"]
-        if any(kw in bt_lower for kw in auto_keywords):
-            is_automotive = True
+    business_phrase = biz_name_str if biz_name_str else "your business"
 
-    if is_automotive:
-        subject = f"A humble perspective on {biz_name_str}'s local visibility gaps" if biz_name_str else "A humble perspective on your local visibility gaps"
-        business_phrase = biz_name_str if biz_name_str else "your business"
-        
+    if step == 2:
+        subject = f"Re: A humble perspective on {biz_name_str}'s local visibility gaps" if biz_name_str else "Following up on local search visibility"
         body_content = f"""
         <p style="margin-top: 0; margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Hi {to_name},</p>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">I was recently reviewing local search visibility for {business_phrase} and wanted to reach out regarding a few fixable gaps that might be costing you service bookings and customer visits.</p>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Many auto shops and dealerships miss out on customers because of simple things: slow mobile page speeds, low local map search rankings, or lack of recommendations from smart AI assistants (Generative Engine Optimization).</p>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We would love to put together a completely free, no-pressure digital marketing audit for you. Here is what we'll review:</p>
-        
-        <ul style="margin-bottom: 18px; padding-left: 20px; font-size: 15px; color: #222222; font-family: sans-serif; line-height: 1.5;">
-            <li><strong>Local Map Rankings:</strong> Where you rank when customers search for direct repair and service keywords.</li>
-            <li><strong>AI Search Visibility:</strong> What tools like ChatGPT and Gemini recommend when drivers ask for local auto service.</li>
-            <li><strong>Actionable Fixes:</strong> Specific improvements to optimize your site speed and prevent booking drops.</li>
-        </ul>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">It only takes about 15 minutes to go over this together. You can pick a convenient time on my calendar here:</p>
-        
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">I wanted to quickly follow up on my note from a couple of days ago regarding local search visibility for {business_phrase}.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">I know you are busy managing daily shop operations, but I wanted to ensure you did not miss our offer for a completely free, no-pressure digital marketing & AI search visibility audit.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">It takes only 15 minutes to review your shop's visibility report. You can pick a time that works best for you here:</p>
         <p style="margin-bottom: 24px; font-size: 15px; font-family: sans-serif;">
             <a href="{booking_url}" style="color: #1a73e8; text-decoration: underline; font-weight: bold;">{booking_url}</a>
         </p>
-        
-        <p style="margin-bottom: 20px; font-size: 15px; color: #222222; font-family: sans-serif;">Looking forward to helping you uncover new visibility opportunities.</p>
-        
+        <p style="margin-bottom: 20px; font-size: 15px; color: #222222; font-family: sans-serif;">Looking forward to connecting!</p>
+        <p style="margin-bottom: 0; font-size: 15px; color: #222222; font-family: sans-serif;">
+            Best regards,<br>
+            <strong>Reach Magnets Team</strong><br>
+            <a href="https://reachmagnets.com" style="color: #1a73e8;">https://reachmagnets.com</a>
+        </p>
+        """
+    elif step == 3:
+        subject = f"Final follow-up regarding {biz_name_str}'s local search audit" if biz_name_str else "Final follow-up regarding local search audit"
+        body_content = f"""
+        <p style="margin-top: 0; margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Hi {to_name},</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">This is my final note regarding {business_phrase}'s local search visibility audit.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We've helped local auto repair and service shops uncover hidden customer leads by optimizing their Google Maps rankings and AI assistant recommendations.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">If you would ever like to review your shop's free audit report, feel free to grab a time slot on my calendar whenever you're ready:</p>
+        <p style="margin-bottom: 24px; font-size: 15px; font-family: sans-serif;">
+            <a href="{booking_url}" style="color: #1a73e8; text-decoration: underline; font-weight: bold;">{booking_url}</a>
+        </p>
+        <p style="margin-bottom: 20px; font-size: 15px; color: #222222; font-family: sans-serif;">Wishing you and {business_phrase} continued growth and success!</p>
         <p style="margin-bottom: 0; font-size: 15px; color: #222222; font-family: sans-serif;">
             Best regards,<br>
             <strong>Reach Magnets Team</strong><br>
@@ -308,33 +302,22 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
         </p>
         """
     else:
-        # General Niche template (Humble & human fallback)
-        subject = f"A humble perspective on {biz_name_str}'s visibility gaps" if biz_name_str else "A humble perspective on your visibility gaps"
-        business_phrase = biz_name_str if biz_name_str else "your business"
-        
+        subject = f"A humble perspective on {biz_name_str}'s local visibility gaps" if biz_name_str else "A humble perspective on your local visibility gaps"
         body_content = f"""
         <p style="margin-top: 0; margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Hi {to_name},</p>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">I was recently reviewing search visibility for {business_phrase} and wanted to reach out regarding a few simple gaps in your online presence that might be costing you potential customers.</p>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We often see local businesses missing out because of a slow website, low local map search rankings, or missing search visibility on new AI assistant results (Generative Engine Optimization/GEO).</p>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We would love to put together a completely free, no-pressure digital marketing audit for you. Here is what we'll check:</p>
-        
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">I was recently reviewing local search visibility for {business_phrase} and wanted to reach out regarding a few fixable gaps that might be costing you service bookings and customer visits.</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">Many auto shops and dealerships miss out on customers because of simple things: slow mobile page speeds, low local map search rankings, or lack of recommendations from smart AI assistants (Generative Engine Optimization).</p>
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">We would love to put together a completely free, no-pressure digital marketing audit for you. Here is what we'll review:</p>
         <ul style="margin-bottom: 18px; padding-left: 20px; font-size: 15px; color: #222222; font-family: sans-serif; line-height: 1.5;">
-            <li><strong>Visibility Audit:</strong> How your website and rankings are performing right now.</li>
-            <li><strong>AI Search Assessment:</strong> Identifying missed search opportunities with AI recommendation engines.</li>
-            <li><strong>Actionable Fixes:</strong> Specific speed and layout improvements to start seeing results faster.</li>
+            <li><strong>Local Map Rankings:</strong> Where you rank when customers search for direct repair and service keywords.</li>
+            <li><strong>AI Search Visibility:</strong> What tools like ChatGPT and Gemini recommend when drivers ask for local auto service.</li>
+            <li><strong>Actionable Fixes:</strong> Specific improvements to optimize your site speed and prevent booking drops.</li>
         </ul>
-        
-        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">It only takes about 15 minutes to review this together. You can pick a convenient time on my calendar here:</p>
-        
+        <p style="margin-bottom: 14px; font-size: 15px; color: #222222; font-family: sans-serif;">It only takes about 15 minutes to go over this together. You can pick a convenient time on my calendar here:</p>
         <p style="margin-bottom: 24px; font-size: 15px; font-family: sans-serif;">
             <a href="{booking_url}" style="color: #1a73e8; text-decoration: underline; font-weight: bold;">{booking_url}</a>
         </p>
-        
         <p style="margin-bottom: 20px; font-size: 15px; color: #222222; font-family: sans-serif;">Looking forward to helping you uncover new visibility opportunities.</p>
-        
         <p style="margin-bottom: 0; font-size: 15px; color: #222222; font-family: sans-serif;">
             Best regards,<br>
             <strong>Reach Magnets Team</strong><br>
@@ -364,9 +347,9 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
     return subject, full_html
 
 
-async def send_outreach_email(to_email: str, to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None, lead_id: Optional[str] = None) -> bool:
-    """Send initial approach/outreach email introducing services via SMTP"""
-    subject, html_content = render_outreach_email(to_name, business_name, business_type)
+async def send_outreach_email(to_email: str, to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None, lead_id: Optional[str] = None, step: int = 1) -> bool:
+    """Send initial approach or follow-up outreach email introducing services via SMTP"""
+    subject, html_content = render_outreach_email(to_name, business_name, business_type, step=step)
     return await send_smtp_email_direct(to_email, subject, html_content, lead_id=lead_id)
 
 
