@@ -347,9 +347,111 @@ def render_outreach_email(to_name: str, business_name: Optional[str] = None, bus
     return subject, full_html
 
 
+async def generate_ai_personalized_email(
+    to_name: str,
+    business_name: Optional[str] = None,
+    business_type: Optional[str] = None,
+    city: Optional[str] = None,
+    state: Optional[str] = None,
+    lead_id: Optional[str] = None,
+    step: int = 1
+) -> tuple[str, str]:
+    """
+    Generates a unique, hyper-personalized B2B cold outreach email using Gemini AI based on extracted lead metadata.
+    Falls back to structured niche HTML templates if AI API is unavailable.
+    """
+    settings = get_settings()
+    api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
+    gmeet_link = getattr(settings, "GMEET_LINK", None)
+    booking_url = gmeet_link.strip() if (gmeet_link and gmeet_link.strip()) else "https://calendar.google.com"
+
+    biz_str = business_name.strip() if business_name else "your business"
+    city_str = city.strip() if city else ""
+    state_str = state.strip() if state else ""
+    location_str = f"{city_str}, {state_str}".strip(", ") if (city_str or state_str) else "your local area"
+
+    if api_key:
+        try:
+            import json
+            prompt = f"""You are an elite B2B cold email copywriter for Reach Magnets (a premier digital growth agency).
+Write a unique, non-template, human, highly persuasive B2B outreach email for this specific prospect.
+
+PROSPECT METADATA:
+- Contact Name: {to_name}
+- Business Name: {biz_str}
+- Industry / Niche: {business_type or 'Auto Body Shop'}
+- Location: {location_str}
+- Outreach Step: Step {step} of 3 ({'Initial Outreach' if step == 1 else '1st Follow-Up 48h later' if step == 2 else 'Final Follow-Up'})
+- Booking Calendar URL: {booking_url}
+
+REACH MAGNETS CORE SERVICES TO HIGHLIGHT:
+1. Google Maps & GBP #1 Local Search Ranking (ranking at the top when drivers search for local auto repair/collision service).
+2. Generative Engine Optimization (GEO): Ensuring AI search assistants (ChatGPT, Gemini, Perplexity) recommend {biz_str} when local drivers ask for recommendations.
+3. Website Speed & Booking Conversion Fixes (converting website visitors into booked repair jobs).
+4. Free 15-Minute No-Pressure Digital Marketing Audit & Strategy Session ({booking_url}).
+
+STRICT RULES:
+- Sounds 100% human, humble, concise, professional, and conversational.
+- NO corporate jargon, NO fake fluff, NO 'Dear Sir/Madam'.
+- Include an HTML call-to-action link to {booking_url}.
+- Return ONLY valid JSON with two fields:
+  {{"subject": "...", "body": "<html body content>"}}"""
+
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"response_mime_type": "application/json"}
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(url, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = json.loads(raw_text)
+                    subject = parsed.get("subject", "")
+                    body_content = parsed.get("body", "")
+                    if subject and body_content:
+                        full_html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>{subject}</title></head>
+<body style="margin: 0; padding: 20px; background-color: #ffffff; font-family: sans-serif; color: #222222;">
+    <div style="max-width: 600px; margin: 0 auto;">
+        {body_content}
+        <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 30px 0 15px 0;">
+        <p style="font-size: 11px; color: #777777; font-family: sans-serif;">
+            &copy; 2026 Reach Magnets &bull; Digital Marketing Excellence<br>
+            If you prefer not to receive helpful visibility audits, reply "stop" to unsubscribe.
+        </p>
+    </div>
+</body>
+</html>"""
+                        logger.info("Generated Gemini AI personalized email", lead=to_name, business=biz_str, step=step)
+                        return subject, full_html
+        except Exception as e:
+            logger.warning("Gemini AI email generation fallback triggered", error=str(e))
+
+    return render_outreach_email(to_name, business_name, business_type, step=step)
+
+
 async def send_outreach_email(to_email: str, to_name: str, business_name: Optional[str] = None, business_type: Optional[str] = None, lead_id: Optional[str] = None, step: int = 1) -> bool:
-    """Send initial approach or follow-up outreach email introducing services via SMTP"""
-    subject, html_content = render_outreach_email(to_name, business_name, business_type, step=step)
+    """Send initial approach or follow-up outreach email introducing services via SMTP using Gemini AI personalized rendering"""
+    city = None
+    state = None
+
+    if lead_id:
+        try:
+            from app.core.database import SessionLocal, uuid_match
+            from app.models.lead import Lead
+            db = SessionLocal()
+            lead = db.query(Lead).filter(uuid_match(Lead.id, lead_id)).first()
+            if lead:
+                city = getattr(lead, "city", None)
+                state = getattr(lead, "state", None)
+            db.close()
+        except Exception:
+            pass
+
+    subject, html_content = await generate_ai_personalized_email(to_name, business_name, business_type, city=city, state=state, lead_id=lead_id, step=step)
     return await send_smtp_email_direct(to_email, subject, html_content, lead_id=lead_id)
 
 

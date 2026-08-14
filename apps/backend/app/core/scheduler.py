@@ -129,10 +129,13 @@ class MasterAutonomousScheduler:
                 asyncio.create_task(self.run_scheduled_extraction(target_limit=MAX_LEADS_PER_EXTRACTION))
 
             # ---------------------------------------------------------------
-            # 📧 2. 24/7 EMAIL OUTREACH (500 emails/day, 45s delay, 365 days)
+            # 📧 2. EMAIL OUTREACH (500 emails/day, 45s delay, Sunday Holiday)
             # ---------------------------------------------------------------
-            if self.daily_emails_sent < MAX_DAILY_EMAILS:
-                logger.info("📧 Running 24/7 3-Step Email Campaign Worker...", hour=current_hour, sent_today=self.daily_emails_sent, max_cap=MAX_DAILY_EMAILS)
+            if current_weekday == 6:
+                if minutes_elapsed % 60 == 0:
+                    logger.info("🏖️ Sunday Email Outreach Holiday (Sunday Off). Email campaign worker paused until Monday 00:00 IST.")
+            elif self.daily_emails_sent < MAX_DAILY_EMAILS:
+                logger.info("📧 Running 6-Day 3-Step Email Campaign Worker...", hour=current_hour, sent_today=self.daily_emails_sent, max_cap=MAX_DAILY_EMAILS)
                 try:
                     await run_active_campaigns()
                 except Exception as e:
@@ -257,16 +260,17 @@ class MasterAutonomousScheduler:
         now_local = datetime.now(timezone.utc).astimezone(ist_tz)
         current_hour = now_local.hour
         current_weekday = now_local.weekday()
+        is_sunday = current_weekday == 6
         return {
             "is_running": self._is_running,
-            "is_weekend_holiday": False,
+            "is_sunday_email_holiday": is_sunday,
             "current_hour": current_hour,
             "total_target_locations": len(TARGET_LOCATIONS),
             "location_index": self.location_index,
             "current_location": TARGET_LOCATIONS[self.location_index % len(TARGET_LOCATIONS)],
             "next_location": TARGET_LOCATIONS[(self.location_index + 1) % len(TARGET_LOCATIONS)],
             "extraction_active": True,
-            "email_outreach_active": True,
+            "email_outreach_active": not is_sunday and (self.daily_emails_sent < MAX_DAILY_EMAILS),
             "voice_calling_active": (20 <= current_hour < 22) or (0 <= current_hour < 1) or (3 <= current_hour < 4),
             "daily_emails_sent": self.daily_emails_sent,
             "max_daily_emails": MAX_DAILY_EMAILS,
