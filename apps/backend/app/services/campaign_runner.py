@@ -51,29 +51,27 @@ def is_within_allowed_run_windows() -> bool:
 
 def is_within_email_send_window() -> bool:
     """
-    Email campaigns run during the 6 PM - 6 AM window (IST).
-    Always returns True if BYPASS_TIME_GATING is set.
+    Email outreach runs 24/7 (Monday through Saturday).
+    Sunday is a holiday (Sunday Off).
     """
-    from app.core.config import get_settings
-    settings = get_settings()
-    if settings.BYPASS_TIME_GATING:
-        return True
-
-    ist_tz = timezone(timedelta(hours=5, minutes=30))
-    now_ist = datetime.now(timezone.utc).astimezone(ist_tz)
-    hour = now_ist.hour
-
-    # 6 PM - midnight or midnight - 6 AM
-    return hour >= 18 or hour < 6
+    return True
 
 async def run_active_campaigns():
     """
-    Scans for active campaigns and spawns loops for them:
-    - Email campaigns: run during 6 PM - 6 AM window
-    - Call campaigns: run during specific call windows only
+    Scans for active campaigns and spawns email and calling loops:
+    - Email outreach runs continuously across database leads with 45s stagger delay
+    - Call campaigns run during specific allowed call windows
     """
     db = SessionLocal()
     try:
+        from app.core.scheduler import scheduler, MAX_DAILY_EMAILS
+        from datetime import timezone
+        
+        # Check if email outreach is below daily cap and start master dispatcher immediately
+        if scheduler.daily_emails_sent < MAX_DAILY_EMAILS:
+            if "master_email_runner" not in RUNNING_CAMPAIGNS:
+                asyncio.create_task(run_master_email_dispatch_loop())
+
         active_campaigns = db.query(Campaign).filter(Campaign.status == "active").all()
         for campaign in active_campaigns:
             if campaign.id in RUNNING_CAMPAIGNS:
@@ -82,24 +80,157 @@ async def run_active_campaigns():
             camp_type = getattr(campaign, "campaign_type", None) or ""
             camp_name = getattr(campaign, "name", "") or ""
 
-            # Email campaign: check email send window
             if camp_type == "email" or "email" in camp_name.lower():
-                if is_within_email_send_window():
-                    logger.info("Found active email campaign to run", campaign_id=str(campaign.id), name=campaign.name)
-                    asyncio.create_task(run_campaign_dialer_loop(cast(Any, campaign.id)))
-                else:
-                    logger.debug("Email campaign outside send window. Skipping.", name=campaign.name)
+                asyncio.create_task(run_campaign_dialer_loop(cast(Any, campaign.id)))
             else:
-                # Call / LinkedIn / other campaigns: check call windows
                 if is_within_allowed_run_windows():
-                    logger.info("Found active call/linkedin campaign to run", campaign_id=str(campaign.id), name=campaign.name)
                     asyncio.create_task(run_campaign_dialer_loop(cast(Any, campaign.id)))
-                else:
-                    logger.debug("Call campaign outside allowed windows. Skipping.", name=campaign.name)
     except Exception as e:
         logger.error("Error checking active campaigns in background runner", error=str(e))
     finally:
         db.close()
+
+
+async def run_master_email_dispatch_loop():
+    """
+    Autonomous Master Email Dispatcher: Continuously picks the highest-priority lead from reachmagnets.db
+    (Step 3 -> Step 2 -> Step 1) and dispatches AI-personalized emails via SMTP with 45s stagger delay.
+    """
+    if "master_email_runner" in RUNNING_CAMPAIGNS:
+        return
+    RUNNING_CAMPAIGNS.add("master_email_runner")
+    logger.info("🚀 Starting Master Autonomous Email Dispatch Loop...")
+
+    try:
+        while True:
+            from app.core.scheduler import scheduler, MAX_DAILY_EMAILS, EMAIL_STAGGER_DELAY_SECONDS
+            from datetime import datetime, timezone, timedelta
+            from sqlalchemy import or_ as sa_or_
+
+            # Check daily limit and Sunday holiday
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
+            now_ist = datetime.now(timezone.utc).astimezone(ist_tz)
+            if now_ist.weekday() == 6:  # Sunday Off
+                logger.info("🏖️ Sunday Email Outreach Holiday. Master Email Dispatch Loop pausing until Monday.")
+                break
+
+            if scheduler.daily_emails_sent >= MAX_DAILY_EMAILS:
+                logger.info(f"🛑 Daily email limit reached ({scheduler.daily_emails_sent}/{MAX_DAILY_EMAILS}). Resuming tomorrow.")
+                break
+
+            db = SessionLocal()
+            lead_id = None
+            current_step = 1
+            to_email = None
+            to_name = "Shop Owner"
+            biz_name = ""
+            biz_type = "Auto Body Shop"
+            try:
+                two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
+
+                # 1. Step 3 (Follow-Up #2): Sent 48h after Step 2
+                lead = db.query(Lead).filter(
+                    Lead.email_sent_at <= two_days_ago,
+                    Lead.email.isnot(None),
+                    Lead.email != "",
+                    Lead.internal_notes.like("%[Email Step 2]%"),
+                    ~Lead.internal_notes.like("%[Email Step 3]%"),
+                    sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                    sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
+                    sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                    Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"]),
+                    Lead.email_bounced_at.is_(None)
+                ).order_by(Lead.email_sent_at).first()
+                if lead:
+                    current_step = 3
+
+                # 2. Step 2 (Follow-Up #1): Sent 48h after Step 1
+                if not lead:
+                    lead = db.query(Lead).filter(
+                        Lead.email_sent_at <= two_days_ago,
+                        Lead.email.isnot(None),
+                        Lead.email != "",
+                        sa_or_(Lead.internal_notes.like("%[Email Step 1]%"), Lead.email_sent_at.isnot(None)),
+                        ~Lead.internal_notes.like("%[Email Step 2]%"),
+                        ~Lead.internal_notes.like("%[Email Step 3]%"),
+                        sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                        sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
+                        sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                        Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"]),
+                        Lead.email_bounced_at.is_(None)
+                    ).order_by(Lead.email_sent_at).first()
+                    if lead:
+                        current_step = 2
+
+                # 3. Step 1 (Initial Email - Fresh Leads)
+                if not lead:
+                    lead = db.query(Lead).filter(
+                        Lead.email_sent_at.is_(None),
+                        Lead.email.isnot(None),
+                        Lead.email != "",
+                        sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
+                        sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
+                        sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                        sa_or_(
+                            Lead.email_status.is_(None),
+                            Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])
+                        ),
+                        Lead.email_bounced_at.is_(None)
+                    ).order_by(Lead.created_at).first()
+                    if lead:
+                        current_step = 1
+
+                if not lead:
+                    logger.info("No more email leads pending in database. Sleeping 60s...")
+                    break
+
+                lead_id = str(lead.id)
+                to_email = str(lead.email)
+                to_name = str(lead.full_name or lead.contact_name or "Shop Owner")
+                biz_name = str(lead.business_name or "")
+                biz_type = str(lead.business_type or "Auto Body Shop")
+            finally:
+                db.close()
+
+            if lead_id and to_email:
+                logger.info(f"📧 Master Dispatcher: Sending Step {current_step} Email to {to_email} ({biz_name})...")
+                from app.utils.automations import send_outreach_email
+                success = await send_outreach_email(
+                    to_email=to_email,
+                    to_name=to_name,
+                    business_name=biz_name,
+                    business_type=biz_type,
+                    lead_id=lead_id,
+                    step=current_step
+                )
+
+                db_update = SessionLocal()
+                try:
+                    lead_obj = db_update.query(Lead).filter(uuid_match(Lead.id, lead_id)).first()
+                    if lead_obj:
+                        now_utc = datetime.now(timezone.utc)
+                        lead_obj.email_sent_at = now_utc  # type: ignore
+                        if success:
+                            lead_obj.email_status = "sent"  # type: ignore
+                            current_notes = getattr(lead_obj, "internal_notes", "") or ""
+                            step_tag = f"[Email Step {current_step}]"
+                            if step_tag not in current_notes:
+                                lead_obj.internal_notes = f"{current_notes} {step_tag}".strip()  # type: ignore
+                            scheduler.record_email_sent()
+                            logger.info(f"✅ Step {current_step} Email successfully sent to {to_email}. Daily total: {scheduler.daily_emails_sent}/{MAX_DAILY_EMAILS}")
+                        else:
+                            lead_obj.email_status = "failed"  # type: ignore
+                        db_update.commit()
+                except Exception as update_err:
+                    logger.error("Error updating lead status in master dispatcher", error=str(update_err))
+                finally:
+                    db_update.close()
+
+            await asyncio.sleep(EMAIL_STAGGER_DELAY_SECONDS)
+    except Exception as e:
+        logger.error("Error in master email dispatch loop", error=str(e))
+    finally:
+        RUNNING_CAMPAIGNS.remove("master_email_runner")
 
 async def run_campaign_dialer_loop(campaign_id: UUID):
     """
