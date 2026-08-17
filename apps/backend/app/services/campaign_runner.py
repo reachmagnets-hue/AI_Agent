@@ -265,14 +265,11 @@ async def run_campaign_dialer_loop(campaign_id: UUID):
                 is_email = camp_type == "email" or ("email" in camp_name.lower() or "e mail" in camp_name.lower())
                 is_linkedin = camp_type == "linkedin" or ("linkedin" in camp_name.lower() or "linked in" in camp_name.lower())
 
-                # Check time window based on campaign type
+                # Check limit for email campaign
                 if is_email:
-                    from app.core.scheduler import scheduler, MAX_NIGHTLY_EMAILS
-                    if scheduler.nightly_emails_sent >= MAX_NIGHTLY_EMAILS:
-                        logger.info("Exiting email campaign loop: Nightly limit reached for window (450 max)", campaign_id=str(campaign_id), sent_tonight=scheduler.nightly_emails_sent)
-                        break
-                    if not is_within_email_send_window():
-                        logger.info("Exiting campaign loop: outside allowed email send window (6 PM - 6 AM IST)", campaign_id=str(campaign_id))
+                    from app.core.scheduler import scheduler, MAX_DAILY_EMAILS
+                    if scheduler.daily_emails_sent >= MAX_DAILY_EMAILS:
+                        logger.info("Exiting email campaign loop: Daily limit reached (500 max)", campaign_id=str(campaign_id), sent_today=scheduler.daily_emails_sent)
                         break
                 elif not is_linkedin:
                     # Check Master Calling Switch for Voice Call campaigns

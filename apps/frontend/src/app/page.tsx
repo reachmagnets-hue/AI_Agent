@@ -382,7 +382,7 @@ export default function Dashboard() {
                   <Mail className="h-3.5 w-3.5 text-emerald-400" /> Emails Sent Today
                 </div>
                 <div className="text-2xl font-black text-white">{(displayStats.emailSentToday || 0).toLocaleString()} <span className="text-xs font-normal text-emerald-200">Emails</span></div>
-                <div className="text-[10px] text-slate-300 mt-1 font-medium">Window: 6 PM - 6 AM</div>
+                <div className="text-[10px] text-emerald-300 font-medium">24/7 Continuous (Max 500/day)</div>
               </div>
 
               {/* 3. Calls Conducted */}
