@@ -186,9 +186,9 @@ async def run_master_email_dispatch_loop():
 
                 lead_id = str(lead.id)
                 to_email = str(lead.email)
-                to_name = str(lead.full_name or lead.contact_name or "Shop Owner")
-                biz_name = str(lead.business_name or "")
-                biz_type = str(lead.business_type or "Auto Body Shop")
+                to_name = str(getattr(lead, "full_name", None) or getattr(lead, "business_name", None) or "Shop Owner")
+                biz_name = str(getattr(lead, "business_name", None) or "")
+                biz_type = str(getattr(lead, "business_type", None) or "Auto Body Shop")
             finally:
                 db.close()
 
