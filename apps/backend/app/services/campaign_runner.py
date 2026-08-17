@@ -138,7 +138,7 @@ async def run_master_email_dispatch_loop():
                     sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
                     sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
                     sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
-                    Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"]),
+                    sa_or_(Lead.email_status.is_(None), Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])),
                     Lead.email_bounced_at.is_(None)
                 ).order_by(Lead.email_sent_at).first()
                 if lead:
@@ -156,7 +156,7 @@ async def run_master_email_dispatch_loop():
                         sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
                         sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
                         sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
-                        Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"]),
+                        sa_or_(Lead.email_status.is_(None), Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])),
                         Lead.email_bounced_at.is_(None)
                     ).order_by(Lead.email_sent_at).first()
                     if lead:
@@ -171,10 +171,7 @@ async def run_master_email_dispatch_loop():
                         sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
                         sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
                         sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
-                        sa_or_(
-                            Lead.email_status.is_(None),
-                            Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])
-                        ),
+                        sa_or_(Lead.email_status.is_(None), Lead.email_status.notin_(["bounced", "blocked", "replied", "clicked"])),
                         Lead.email_bounced_at.is_(None)
                     ).order_by(Lead.created_at).first()
                     if lead:
