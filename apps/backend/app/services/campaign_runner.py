@@ -139,9 +139,8 @@ async def run_master_email_dispatch_loop():
                     ~Lead.email.in_(INVALID_EMAILS),
                     Lead.internal_notes.like("%[Email Step 2]%"),
                     ~Lead.internal_notes.like("%[Email Step 3]%"),
-                    sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
-                    sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
-                    sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                    sa_or_(Lead.is_dnc == False, Lead.is_dnc == 0, Lead.is_dnc.is_(None)),
+                    sa_or_(Lead.opted_out == False, Lead.opted_out == 0, Lead.opted_out.is_(None)),
                     sa_or_(Lead.email_status.is_(None), Lead.email_status.notin_(EXCLUDED_STATUSES)),
                     Lead.email_bounced_at.is_(None)
                 ).order_by(Lead.email_sent_at).first()
@@ -158,9 +157,8 @@ async def run_master_email_dispatch_loop():
                         sa_or_(Lead.internal_notes.like("%[Email Step 1]%"), Lead.email_sent_at.isnot(None)),
                         ~Lead.internal_notes.like("%[Email Step 2]%"),
                         ~Lead.internal_notes.like("%[Email Step 3]%"),
-                        sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
-                        sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
-                        sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                        sa_or_(Lead.is_dnc == False, Lead.is_dnc == 0, Lead.is_dnc.is_(None)),
+                        sa_or_(Lead.opted_out == False, Lead.opted_out == 0, Lead.opted_out.is_(None)),
                         sa_or_(Lead.email_status.is_(None), Lead.email_status.notin_(EXCLUDED_STATUSES)),
                         Lead.email_bounced_at.is_(None)
                     ).order_by(Lead.email_sent_at).first()
@@ -174,9 +172,8 @@ async def run_master_email_dispatch_loop():
                         Lead.email.isnot(None),
                         Lead.email.like("%@%.%"),
                         ~Lead.email.in_(INVALID_EMAILS),
-                        sa_or_(Lead.is_dnc == False, Lead.is_dnc.is_(None)),
-                        sa_or_(Lead.is_active == True, Lead.is_active.is_(None)),
-                        sa_or_(Lead.opted_out == False, Lead.opted_out.is_(None)),
+                        sa_or_(Lead.is_dnc == False, Lead.is_dnc == 0, Lead.is_dnc.is_(None)),
+                        sa_or_(Lead.opted_out == False, Lead.opted_out == 0, Lead.opted_out.is_(None)),
                         sa_or_(Lead.email_status.is_(None), Lead.email_status.notin_(EXCLUDED_STATUSES)),
                         Lead.email_bounced_at.is_(None)
                     ).order_by(Lead.created_at.asc()).first()

@@ -60,9 +60,8 @@ async def send_smtp_email_direct(to_email: str, subject: str, html_content: str,
     logger.info("Triggering SMTP email direct dispatch (waiting for queue lock)", to=to_email, host=host, port=port, user=user)
 
     if not user or not password:
-        logger.warning("SMTP user or password not configured. Mocking SMTP email delivery.")
-        logger.info(f"Mock SMTP Email payload:\nTo: {to_email}\nSubject: {subject}\nBody preview: {html_content[:200]}...")
-        return True
+        logger.error("🛑 CANNOT SEND REAL EMAIL: SMTP_USER or SMTP_PASSWORD is not set in .env! Please add SMTP_USER and SMTP_PASSWORD to apps/backend/.env to enable live outreach.")
+        return False
 
     # Generate custom Message-ID
     import uuid

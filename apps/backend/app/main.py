@@ -66,6 +66,13 @@ async def lifespan(app: FastAPI):
 
     # Start background hourly scheduler
     scheduler.start()
+    try:
+        import asyncio
+        from app.services.campaign_runner import run_master_email_dispatch_loop
+        asyncio.create_task(run_master_email_dispatch_loop())
+        logger.info("🚀 Master Autonomous Email Dispatcher task spawned on API startup.")
+    except Exception as e:
+        logger.error(f"Failed spawning Master Email Dispatcher task on startup: {e}")
     
     # Register webhook with Retell dynamically if public URL is configured
     if settings.RETELL_API_KEY and settings.RETELL_API_KEY != "your_retell_api_key" and settings.BASE_URL and "localhost" not in settings.BASE_URL:
@@ -261,7 +268,7 @@ async def trigger_extraction_manual(location: str = "Denver, CO"):
     """Manually trigger scheduled multi-location extraction"""
     from app.core.scheduler import scheduler
     import asyncio
-    asyncio.create_task(scheduler.run_scheduled_extraction(location))
+    asyncio.create_task(scheduler.run_scheduled_extraction(target_limit=1000))
     return {"status": "success", "message": f"Manual extraction triggered for location: {location}"}
 
 @app.websocket("/ws/live")
