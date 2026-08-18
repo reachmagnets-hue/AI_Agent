@@ -209,8 +209,8 @@ async def run_master_email_dispatch_loop():
                     lead_obj = db_update.query(Lead).filter(uuid_match(Lead.id, lead_id)).first()
                     if lead_obj:
                         now_utc = datetime.now(timezone.utc)
-                        lead_obj.email_sent_at = now_utc  # type: ignore
                         if success:
+                            lead_obj.email_sent_at = now_utc  # type: ignore
                             lead_obj.email_status = "sent"  # type: ignore
                             current_notes = getattr(lead_obj, "internal_notes", "") or ""
                             step_tag = f"[Email Step {current_step}]"
@@ -219,7 +219,8 @@ async def run_master_email_dispatch_loop():
                             scheduler.record_email_sent()
                             logger.info(f"✅ Step {current_step} Email successfully sent to {to_email}. Daily total: {scheduler.daily_emails_sent}/{MAX_DAILY_EMAILS}")
                         else:
-                            lead_obj.email_status = "failed"  # type: ignore
+                            logger.warning(f"⚠️ Email dispatch returned False for lead {to_email}. Preserving email_sent_at=None for retry.")
+                            lead_obj.email_status = "pending_retry"  # type: ignore
                         db_update.commit()
                 except Exception as update_err:
                     logger.error("Error updating lead status in master dispatcher", error=str(update_err))
